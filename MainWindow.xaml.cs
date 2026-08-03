@@ -64,25 +64,60 @@ namespace Lume
         {
             currentFilePath = openedFilePath;
 
+            // 【强制拦截 1】：确保 LumeWorkspace 里必须有文件夹，如果没有，必须建一个！
+            string[] folders = Directory.GetDirectories(rootWorkspacePath);
+            if (folders.Length == 0)
+            {
+                Directory.CreateDirectory(Path.Combine(rootWorkspacePath, "默认文件夹"));
+                folders = Directory.GetDirectories(rootWorkspacePath);
+            }
+
+            // 【强制拦截 2】：判断打开的笔记到底是不是在我们合法的文件夹里？
             if (!string.IsNullOrEmpty(currentFilePath) && File.Exists(currentFilePath))
             {
-                currentFolderPath = Path.GetDirectoryName(currentFilePath);
-                LoadFolders(); // 刷新左侧列表，让选中的文件夹高亮
-                LoadNotes(currentFolderPath);
+                string noteFolder = Path.GetDirectoryName(currentFilePath);
 
+                // 核心修复：检查这个笔记的文件夹，是不是 LumeWorkspace 里面的？
+                if (noteFolder.StartsWith(rootWorkspacePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentFolderPath = noteFolder;
+                }
+                else
+                {
+                    // 这是一个以前Bug产生的“流浪笔记”！
+                    // 强行把当前侧边栏选中目标，锁死到工作区的第一个文件夹！
+                    currentFolderPath = folders[0];
+                }
+            }
+            else
+            {
+                // 正常启动，强制选中第一个文件夹！
+                currentFolderPath = folders[0];
+            }
+
+            // 【强制拦截 3】：为了防止路径大小写不一致导致高亮失败，做一次严格匹配
+            bool isValid = false;
+            foreach (string f in folders)
+            {
+                if (string.Equals(f, currentFolderPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentFolderPath = f;
+                    isValid = true;
+                    break;
+                }
+            }
+            if (!isValid) currentFolderPath = folders[0]; // 终极兜底：强行绑定！
+
+            LoadFolders();
+            LoadNotes(currentFolderPath);
+
+            if (!string.IsNullOrEmpty(currentFilePath) && File.Exists(currentFilePath))
+            {
                 LoadNote();
                 ShowEditor(true);
             }
             else
             {
-                string[] folders = Directory.GetDirectories(rootWorkspacePath);
-                if (folders.Length > 0)
-                {
-                    currentFolderPath = folders[0];
-                    LoadFolders(); // 刷新左侧列表，让第一个文件夹高亮
-                    LoadNotes(currentFolderPath);
-                }
-
                 ShowEditor(false);
             }
         }
@@ -105,19 +140,9 @@ namespace Lume
         {
             if (EditorContainer.Visibility == Visibility.Visible) return;
 
-            currentNote = new NoteData();
-            currentFilePath = null;
-            isDirty = true; // 新建文件天然算作修改过
-
-            NoteTitleBox.Text = currentNote.Title;
-            NoteEditor.Document.Blocks.Clear();
-            NoteEditor.Document.Blocks.Add(new Paragraph());
-            StatusText.Text = "新笔记 (未保存)";
-
-            ShowEditor(true);
-
-            NoteTitleBox.Focus();
-            NoteTitleBox.CaretIndex = NoteTitleBox.Text.Length;
+            // 【关键修复】：不要制造 currentFilePath = null 的孤儿笔记！
+            // 强制调用常规的“新建笔记”逻辑，确保笔记归属于当前高亮的文件夹
+            BtnAddNote_Click(null, null);
         }
 
         private void BtnAddNote_Click(object sender, MouseButtonEventArgs e)
@@ -128,29 +153,37 @@ namespace Lume
                 return;
             }
 
-            string baseName = "新笔记";
-            string newFilePath = Path.Combine(currentFolderPath, baseName + ".lume");
-            int counter = 1;
+            // lumeYYMMDDxx 命名格式
+            string dateStr = DateTime.Now.ToString("yyMMdd");
+            int seq = 1;
+            string newFilePath;
 
-            while (File.Exists(newFilePath))
+            while (true)
             {
-                newFilePath = Path.Combine(currentFolderPath, $"{baseName} ({counter}).lume");
-                counter++;
+                // 保证两位数序号，例如 01, 02
+                string seqStr = seq.ToString("D2");
+                newFilePath = Path.Combine(currentFolderPath, $"lume{dateStr}{seqStr}.lume");
+
+                if (!File.Exists(newFilePath))
+                {
+                    break; // 找到未被占用的文件名，跳出循环
+                }
+                seq++;
             }
 
             // 创建空文件并保存
             NoteData newNote = new NoteData { Title = "新笔记", DateCreated = DateTime.Now.ToString("yyyy/MM/dd") };
             LumeFileManager.SaveLumeFile(newFilePath, newNote);
 
-            LoadNotes(currentFolderPath); // 刷新笔记列表
-
-            // 将当前文件路径设为刚新建的文件，打开编辑器，并把光标焦点放到标题上
+            // 【核心修复4】：必须先告诉系统 currentFilePath 是谁，再去刷新列表
             currentFilePath = newFilePath;
             LoadNote();
             ShowEditor(true);
 
+            LoadNotes(currentFolderPath); // 现在刷新列表，它就会被正确高亮，且连带标题联动！
+
             NoteTitleBox.Focus();       // 聚焦到标题
-            NoteTitleBox.SelectAll();   // 全选"新笔记"三个字，方便用户直接打字替换
+            NoteTitleBox.SelectAll();   // 全选"新笔记"三个字
         }
 
         private void LoadNotes(string folderPath)
@@ -163,28 +196,32 @@ namespace Lume
             {
                 NoteData noteData = LumeFileManager.OpenLumeFile(file);
 
+                // 检查当前循环到的笔记，是不是正在编辑的那个
+                bool isSelected = (file == currentFilePath);
+
                 Border cardBorder = new Border
                 {
-                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(243, 243, 243)),
+                    // 如果是正在编辑的笔记，使用最浅的淡白色，否则透明（没有背景）
+                    Background = new System.Windows.Media.SolidColorBrush(
+                        isSelected ? System.Windows.Media.Color.FromRgb(243, 243, 243) : System.Windows.Media.Colors.Transparent),
                     CornerRadius = new CornerRadius(8),
                     Padding = new Thickness(15),
                     Margin = new Thickness(0, 0, 0, 10),
                     Cursor = Cursors.Hand
                 };
 
-                // 挂载右键删除菜单
                 ContextMenu ctx = new ContextMenu();
                 MenuItem deleteItem = new MenuItem { Header = "删除笔记" };
                 deleteItem.Click += (s, e) => ShowDeleteDialog(file, false);
                 ctx.Items.Add(deleteItem);
                 cardBorder.ContextMenu = ctx;
 
-                // 左键点击打开笔记到编辑器
                 cardBorder.MouseLeftButtonDown += (s, e) =>
                 {
                     currentFilePath = file;
                     LoadNote();
                     ShowEditor(true);
+                    LoadNotes(folderPath); // 点击其他笔记时，重新刷新列表以更新高亮
                 };
 
                 StackPanel cardStack = new StackPanel();
@@ -194,6 +231,12 @@ namespace Lume
                     FontWeight = FontWeights.Bold,
                     TextTrimming = TextTrimming.CharacterEllipsis
                 };
+
+                // 【核心修复3】：把渲染出来的标题控件绑定到全局变量，这样你在右边打字，左边才能跟着实时变！
+                if (isSelected)
+                {
+                    currentNoteListTitleUI = titleText;
+                }
 
                 TextBlock dateText = new TextBlock
                 {
@@ -215,6 +258,9 @@ namespace Lume
             currentNote = LumeFileManager.OpenLumeFile(currentFilePath);
             NoteTitleBox.Text = currentNote.Title;
 
+            // 【必须添加的致命修复】：在加载任何内容前，先清空旧内容！
+            NoteEditor.Document.Blocks.Clear();
+
             if (!string.IsNullOrEmpty(currentNote.ContentRtf))
             {
                 using (MemoryStream ms = new MemoryStream(System.Text.Encoding.Default.GetBytes(currentNote.ContentRtf)))
@@ -223,7 +269,13 @@ namespace Lume
                     textRange.Load(ms, DataFormats.Rtf);
                 }
             }
-            isDirty = false; // 加载后状态是干净的
+            else
+            {
+                // 【细节修复】：如果是空笔记，必须塞入一个空段落，强制清空边距
+                NoteEditor.Document.Blocks.Add(new Paragraph { Margin = new Thickness(0) });
+            }
+
+            isDirty = false;
         }
 
         // 监听全局鼠标点击，判断是否点到了外部
@@ -278,7 +330,6 @@ namespace Lume
             if (!isDirty) return true; // 没修改就不保存
             if (EditorContainer.Visibility != Visibility.Visible) return true;
 
-            // 【解答第一个问题】：保存时如果标题被清空了，强行把右侧文本框填上“无标题笔记”
             if (string.IsNullOrWhiteSpace(NoteTitleBox.Text))
             {
                 NoteTitleBox.Text = "无标题笔记";
@@ -318,10 +369,16 @@ namespace Lume
             LumeFileManager.SaveLumeFile(currentFilePath, currentNote);
             StatusText.Text = $"已保存到本地 {DateTime.Now:HH:mm:ss}";
 
-            // 保存成功后，记录当前文件路径，以便下次启动时自动加载
             File.WriteAllText(GetConfigPath(), currentFilePath);
 
             isDirty = false; // 保存成功，恢复干净状态
+
+            // 【核心修复1】：保存成功后，强行刷新一遍中间的笔记列表！
+            if (!string.IsNullOrEmpty(currentFolderPath))
+            {
+                LoadNotes(currentFolderPath);
+            }
+
             return true;
         }
 
@@ -333,12 +390,13 @@ namespace Lume
             while (true)
             {
                 string seqStr = seq.ToString("D2");
-                string testName = $"Lume{dateStr}{seqStr}.lume";
+                // 把这里的大写 Lume 统一改成小写 lume
+                string testName = $"lume{dateStr}{seqStr}.lume";
                 string fullPath = Path.Combine(directoryPath, testName);
 
                 if (!File.Exists(fullPath))
                 {
-                    return $"Lume{dateStr}{seqStr}";
+                    return $"lume{dateStr}{seqStr}";
                 }
                 seq++;
             }
@@ -378,7 +436,6 @@ namespace Lume
             string newFolderPath = Path.Combine(rootWorkspacePath, baseName);
             int counter = 1;
 
-            // 自动重命名以避免冲突
             while (Directory.Exists(newFolderPath))
             {
                 newFolderPath = Path.Combine(rootWorkspacePath, $"{baseName} ({counter})");
@@ -386,7 +443,17 @@ namespace Lume
             }
 
             Directory.CreateDirectory(newFolderPath);
-            LoadFolders(); // 刷新文件夹列表
+
+            // 【关键修复】：新建了文件夹，必须立刻让它变成“当前正在使用的文件夹”
+            currentFolderPath = newFolderPath;
+
+            // 如果之前有正在编辑的笔记，现在切到新文件夹了，右侧必须清空关闭
+            if (isDirty) SaveNote();
+            currentFilePath = null;
+            ShowEditor(false);
+
+            LoadFolders();
+            LoadNotes(currentFolderPath);
         }
 
         private void LoadFolders()
@@ -398,7 +465,7 @@ namespace Lume
             foreach (string folder in folders)
             {
                 // 判断当前循环到的文件夹，是不是我们选中的文件夹
-                bool isSelected = (folder == currentFolderPath);
+                bool isSelected = string.Equals(folder, currentFolderPath, StringComparison.OrdinalIgnoreCase);
 
                 Border folderBorder = new Border
                 {
@@ -417,10 +484,19 @@ namespace Lume
                 ctx.Items.Add(deleteItem);
                 folderBorder.ContextMenu = ctx;
 
+                // 在 LoadFolders() 方法内，修改 folderBorder.MouseLeftButtonDown：
                 folderBorder.MouseLeftButtonDown += (s, e) =>
                 {
+                    // 【关键修复】：如果点击的是不同的文件夹，必须先处理当前正在编辑的笔记
+                    if (currentFolderPath != folder)
+                    {
+                        if (isDirty) SaveNote(); // 如果有修改，先保存
+                        currentFilePath = null;  // 清除当前文件路径
+                        ShowEditor(false);       // 关闭编辑器，显示“单击此处新建笔记”
+                    }
+
                     currentFolderPath = folder;
-                    LoadFolders(); // 点击后，重新刷新一次所有文件夹的颜色
+                    LoadFolders();
                     LoadNotes(folder);
                 };
 
@@ -453,12 +529,17 @@ namespace Lume
         {
             try
             {
+                // 在 BtnConfirmDelete_Click 方法内，修改删除文件夹的判断逻辑：
                 if (isDeletingFolder && Directory.Exists(itemToDeletePath))
                 {
-                    Directory.Delete(itemToDeletePath, true); // true表示连同内部文件一起删除
-                    if (currentFolderPath == itemToDeletePath)
+                    Directory.Delete(itemToDeletePath, true);
+
+                    // 【关键修复】：如果删除的文件夹就是当前文件夹，或者当前正在编辑的笔记属于这个被删的文件夹
+                    if (currentFolderPath == itemToDeletePath ||
+                       (currentFilePath != null && currentFilePath.StartsWith(itemToDeletePath)))
                     {
                         currentFolderPath = null;
+                        currentFilePath = null; // 必须把文件路径也置空！
                         NoteListPanel.Children.Clear();
                         ShowEditor(false);
                     }

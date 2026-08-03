@@ -115,7 +115,14 @@
                                  TextChanged="Editor_TextChanged"/>
 
                         <RichTextBox x:Name="NoteEditor" Grid.Row="2" BorderThickness="0" Background="Transparent"
-                                     TextChanged="Editor_TextChanged" FontSize="15" FontFamily="Segoe UI">
+             TextChanged="Editor_TextChanged" FontSize="15" FontFamily="Segoe UI">
+
+                            <RichTextBox.Resources>
+                                <Style TargetType="{x:Type Paragraph}">
+                                    <Setter Property="Margin" Value="0"/>
+                                </Style>
+                            </RichTextBox.Resources>
+
                             <FlowDocument>
                                 <Paragraph></Paragraph>
                             </FlowDocument>
