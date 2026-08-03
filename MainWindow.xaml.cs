@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Linq;
 
 namespace Lume
 {
@@ -191,7 +192,11 @@ namespace Lume
             NoteListPanel.Children.Clear();
             if (!Directory.Exists(folderPath)) return;
 
-            string[] noteFiles = Directory.GetFiles(folderPath, "*.lume");
+            // 获取文件列表并按【创建时间倒序】排列，最新创建的在最前面
+            var noteFiles = Directory.GetFiles(folderPath, "*.lume")
+                                     .Select(f => new FileInfo(f))
+                                     .OrderByDescending(f => f.CreationTime)
+                                     .Select(f => f.FullName);
             foreach (string file in noteFiles)
             {
                 NoteData noteData = LumeFileManager.OpenLumeFile(file);
