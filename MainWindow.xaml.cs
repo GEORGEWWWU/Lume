@@ -506,27 +506,32 @@ namespace Lume
             bool isSaved = SaveNote();
             if (isSaved)
             {
-                // 把当前选中的文件夹路径存起来
                 if (!string.IsNullOrEmpty(currentFolderPath))
                 {
                     File.WriteAllText(GetConfigPath(), currentFolderPath);
                 }
 
-                Application.Current.Shutdown();
+                // 调用系统内置关闭命令，触发系统淡出/缩放动画
+                SystemCommands.CloseWindow(this);
             }
         }
 
         private void BtnMinimize_Click(object sender, MouseButtonEventArgs e)
         {
-            this.WindowState = WindowState.Minimized;
+            // 调用系统内置最小化命令，触发平滑缩放到任务栏动画
+            SystemCommands.MinimizeWindow(this);
         }
 
         private void BtnMaximize_Click(object sender, MouseButtonEventArgs e)
         {
             if (this.WindowState == WindowState.Maximized)
-                this.WindowState = WindowState.Normal;
+            {
+                SystemCommands.RestoreWindow(this);
+            }
             else
-                this.WindowState = WindowState.Maximized;
+            {
+                SystemCommands.MaximizeWindow(this);
+            }
         }
 
         private void BtnAddFolder_Click(object sender, MouseButtonEventArgs e)
