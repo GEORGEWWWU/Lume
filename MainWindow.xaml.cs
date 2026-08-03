@@ -63,12 +63,30 @@ namespace Lume
         public MainWindow(string openedFilePath)
         {
             InitializeComponent();
+
+            // 补上工作区路径初始化（防止 rootWorkspacePath 为 null）
+            rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
+            if (!Directory.Exists(rootWorkspacePath))
+            {
+                Directory.CreateDirectory(rootWorkspacePath);
+            }
+
             SetupEnvironment(openedFilePath);
         }
 
         private void SetupEnvironment(string openedFilePath)
         {
             currentFilePath = openedFilePath;
+
+            // 防御性校验：确保 rootWorkspacePath 绝对不为 null
+            if (string.IsNullOrEmpty(rootWorkspacePath))
+            {
+                rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
+                if (!Directory.Exists(rootWorkspacePath))
+                {
+                    Directory.CreateDirectory(rootWorkspacePath);
+                }
+            }
 
             // 【强制拦截 1】：确保 LumeWorkspace 里必须有文件夹，如果没有，必须建一个！
             string[] folders = Directory.GetDirectories(rootWorkspacePath);
