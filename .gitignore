@@ -1,0 +1,22 @@
+# VS 本地缓存目录（报错源头）
+.vs/
+*.vsidx
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 编译输出目录
+bin/
+obj/
+x64/
+x86/
+AnyCPU/
+
+# 日志、临时文件
+*.log
+*.tmp
+*.bak
+
+# NuGet 缓存包
+packages/
