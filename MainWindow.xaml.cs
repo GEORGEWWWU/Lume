@@ -559,6 +559,10 @@ namespace Lume
             string[] folders = Directory.GetDirectories(rootWorkspacePath);
             foreach (string folder in folders)
             {
+                // 判断当前是不是系统自带的“默认文件夹”
+                string folderName = Path.GetFileName(folder);
+                bool isDefaultFolder = folderName == "默认文件夹";
+
                 // 判断当前循环到的文件夹，是不是我们选中的文件夹
                 bool isSelected = string.Equals(folder, currentFolderPath, StringComparison.OrdinalIgnoreCase);
 
@@ -574,12 +578,22 @@ namespace Lume
                 };
 
                 ContextMenu ctx = new ContextMenu();
-                MenuItem deleteItem = new MenuItem { Header = "删除文件夹" };
-                deleteItem.Click += (s, e) => ShowDeleteDialog(folder, true);
-                ctx.Items.Add(deleteItem);
+
+                // 【关键保护逻辑】：区分对待默认文件夹
+                if (!isDefaultFolder)
+                {
+                    MenuItem deleteItem = new MenuItem { Header = "删除文件夹" };
+                    deleteItem.Click += (s, e) => ShowDeleteDialog(folder, true);
+                    ctx.Items.Add(deleteItem);
+                }
+                else
+                {
+                    MenuItem lockItem = new MenuItem { Header = "系统默认 (不可修改)", IsEnabled = false };
+                    ctx.Items.Add(lockItem);
+                }
+
                 folderBorder.ContextMenu = ctx;
 
-                // 在 LoadFolders() 方法内，修改 folderBorder.MouseLeftButtonDown：
                 folderBorder.MouseLeftButtonDown += (s, e) =>
                 {
                     // 如果点击的是不同的文件夹，必须先处理当前正在编辑的笔记
@@ -597,14 +611,14 @@ namespace Lume
 
                 TextBlock text = new TextBlock
                 {
-                    Text = "📁 " + Path.GetFileName(folder),
+                    Text = "📁 " + folderName,
                     FontWeight = FontWeights.SemiBold,
                     Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51))
                 };
 
                 TextBox editBox = new TextBox
                 {
-                    Text = Path.GetFileName(folder),
+                    Text = folderName,
                     Visibility = Visibility.Collapsed,
                     MaxLength = 64, // 限制最大长度64字
                     FontWeight = FontWeights.SemiBold,
@@ -618,83 +632,86 @@ namespace Lume
                 itemGrid.Children.Add(editBox);
                 folderBorder.Child = itemGrid;
 
-                // 重命名右键菜单项
-                MenuItem renameItem = new MenuItem { Header = "重命名" };
-                renameItem.Click += (s, e) =>
+                // 【关键保护逻辑】：只有不是默认文件夹，才允许重命名
+                if (!isDefaultFolder)
                 {
-                    text.Visibility = Visibility.Collapsed;
-                    editBox.Visibility = Visibility.Visible;
-                    editBox.Focus();
-                    editBox.SelectAll();
-                };
-                ctx.Items.Insert(0, renameItem); // 插入到右键菜单最上面
-
-                // 失去焦点（点击外面）或按下回车时，执行保存逻辑
-                editBox.LostFocus += (s, e) =>
-                {
-                    text.Visibility = Visibility.Visible;
-                    editBox.Visibility = Visibility.Collapsed;
-
-                    string newName = editBox.Text.Trim();
-                    string oldName = Path.GetFileName(folder);
-
-                    if (string.IsNullOrEmpty(newName) || newName == oldName) return;
-
-                    // 正则过滤：只允许汉字、字母、数字、空格、下划线、连字符
-                    if (!Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
+                    MenuItem renameItem = new MenuItem { Header = "重命名" };
+                    renameItem.Click += (s, e) =>
                     {
-                        MessageBox.Show("名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        editBox.Text = oldName;
-                        return;
-                    }
+                        text.Visibility = Visibility.Collapsed;
+                        editBox.Visibility = Visibility.Visible;
+                        editBox.Focus();
+                        editBox.SelectAll();
+                    };
+                    ctx.Items.Insert(0, renameItem); // 插入到右键菜单最上面
 
-                    string newFolderPath = Path.Combine(rootWorkspacePath, newName);
-                    if (Directory.Exists(newFolderPath))
+                    // 失去焦点（点击外面）或按下回车时，执行保存逻辑
+                    editBox.LostFocus += (s, e) =>
                     {
-                        MessageBox.Show("已存在同名文件夹！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        editBox.Text = oldName;
-                        return;
-                    }
+                        text.Visibility = Visibility.Visible;
+                        editBox.Visibility = Visibility.Collapsed;
 
-                    try
-                    {
-                        Directory.Move(folder, newFolderPath); // 修改本地文件夹名称
+                        string newName = editBox.Text.Trim();
+                        string oldName = Path.GetFileName(folder);
 
-                        // 如果重命名的是当前正在使用的文件夹，同步更新全局变量
-                        if (currentFolderPath == folder) currentFolderPath = newFolderPath;
-                        if (currentFilePath != null && currentFilePath.StartsWith(folder))
+                        if (string.IsNullOrEmpty(newName) || newName == oldName) return;
+
+                        // 正则过滤：只允许汉字、字母、数字、空格、下划线、连字符
+                        if (!Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
                         {
-                            currentFilePath = Path.Combine(newFolderPath, Path.GetFileName(currentFilePath));
+                            MessageBox.Show("名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            editBox.Text = oldName;
+                            return;
                         }
 
-                        // 延迟刷新以防止 UI 线程冲突
-                        Application.Current.Dispatcher.BeginInvoke(new Action(() => {
-                            LoadFolders();
-                            if (currentFolderPath == newFolderPath) LoadNotes(currentFolderPath);
-                        }));
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("重命名失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        editBox.Text = oldName;
-                    }
-                };
+                        string newFolderPath = Path.Combine(rootWorkspacePath, newName);
+                        if (Directory.Exists(newFolderPath))
+                        {
+                            MessageBox.Show("已存在同名文件夹！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            editBox.Text = oldName;
+                            return;
+                        }
 
-                // 按键支持：按 Enter 保存，按 Esc 取消
-                editBox.KeyDown += (s, e) =>
-                {
-                    if (e.Key == Key.Enter)
+                        try
+                        {
+                            Directory.Move(folder, newFolderPath); // 修改本地文件夹名称
+
+                            // 如果重命名的是当前正在使用的文件夹，同步更新全局变量
+                            if (currentFolderPath == folder) currentFolderPath = newFolderPath;
+                            if (currentFilePath != null && currentFilePath.StartsWith(folder))
+                            {
+                                currentFilePath = Path.Combine(newFolderPath, Path.GetFileName(currentFilePath));
+                            }
+
+                            // 延迟刷新以防止 UI 线程冲突
+                            Application.Current.Dispatcher.BeginInvoke(new Action(() => {
+                                LoadFolders();
+                                if (currentFolderPath == newFolderPath) LoadNotes(currentFolderPath);
+                            }));
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show("重命名失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                            editBox.Text = oldName;
+                        }
+                    };
+
+                    // 按键支持：按 Enter 保存，按 Esc 取消
+                    editBox.KeyDown += (s, e) =>
                     {
-                        e.Handled = true; // 阻止默认按键行为（避免发出提示音）
-                        this.Focus();     // 强行把焦点转移给主窗口，100% 触发 LostFocus 执行保存
-                    }
-                    else if (e.Key == Key.Escape)
-                    {
-                        e.Handled = true;
-                        editBox.Text = Path.GetFileName(folder); // 恢复原名
-                        this.Focus();     // 移走焦点取消编辑
-                    }
-                };
+                        if (e.Key == Key.Enter)
+                        {
+                            e.Handled = true; // 阻止默认按键行为
+                            this.Focus();     // 强行把焦点转移给主窗口，100% 触发 LostFocus 执行保存
+                        }
+                        else if (e.Key == Key.Escape)
+                        {
+                            e.Handled = true;
+                            editBox.Text = Path.GetFileName(folder); // 恢复原名
+                            this.Focus();     // 移走焦点取消编辑
+                        }
+                    };
+                }
 
                 FolderListPanel.Children.Add(folderBorder);
             }
@@ -702,6 +719,13 @@ namespace Lume
 
         private void ShowDeleteDialog(string path, bool isFolder)
         {
+            // 不允许删除默认文件夹
+            if (isFolder && Path.GetFileName(path) == "默认文件夹")
+            {
+                MessageBox.Show("「默认文件夹」为系统保留区域，不可删除！", "拦截提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             itemToDeletePath = path;
             isDeletingFolder = isFolder;
             DeleteConfirmDialog.Visibility = Visibility.Visible;
