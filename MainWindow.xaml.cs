@@ -240,7 +240,7 @@ namespace Lume
 
                 StackPanel cardStack = new StackPanel();
 
-                // 【之前漏掉的补在这里】：创建日期文本
+                // 创建日期文本
                 TextBlock dateText = new TextBlock
                 {
                     Text = noteData.DateCreated,
@@ -260,11 +260,15 @@ namespace Lume
                 {
                     Text = noteData.Title,
                     Visibility = Visibility.Collapsed,
-                    MaxLength = 64, // 限制最大长度64字
+                    MaxLength = 64,
                     FontWeight = FontWeights.Bold,
+                    FontSize = titleText.FontSize,
+                    Foreground = titleText.Foreground,
                     BorderThickness = new Thickness(0),
-                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
-                    Margin = new Thickness(-2, 0, 0, 0)
+                    Background = System.Windows.Media.Brushes.Transparent,
+                    Padding = new Thickness(0),
+                    Margin = new Thickness(0),
+                    VerticalAlignment = VerticalAlignment.Center
                 };
 
                 Grid titleGrid = new Grid();
@@ -556,19 +560,19 @@ namespace Lume
             if (FolderListPanel == null) return;
             FolderListPanel.Children.Clear();
 
-            string[] folders = Directory.GetDirectories(rootWorkspacePath);
+            // 【核心优化】：默认文件夹强制置顶；其余文件夹按【创建时间倒序】排列（最新创建的在最上面）
+            var folders = Directory.GetDirectories(rootWorkspacePath)
+                                   .OrderByDescending(f => Path.GetFileName(f) == "默认文件夹")
+                                   .ThenByDescending(f => Directory.GetCreationTime(f));
+
             foreach (string folder in folders)
             {
-                // 判断当前是不是系统自带的“默认文件夹”
                 string folderName = Path.GetFileName(folder);
                 bool isDefaultFolder = folderName == "默认文件夹";
-
-                // 判断当前循环到的文件夹，是不是我们选中的文件夹
                 bool isSelected = string.Equals(folder, currentFolderPath, StringComparison.OrdinalIgnoreCase);
 
                 Border folderBorder = new Border
                 {
-                    // 如果选中了，就给一个浅灰色背景，否则透明
                     Background = new System.Windows.Media.SolidColorBrush(
                         isSelected ? System.Windows.Media.Color.FromRgb(225, 225, 225) : System.Windows.Media.Colors.Transparent),
                     CornerRadius = new CornerRadius(6),
@@ -579,7 +583,6 @@ namespace Lume
 
                 ContextMenu ctx = new ContextMenu();
 
-                // 【关键保护逻辑】：区分对待默认文件夹
                 if (!isDefaultFolder)
                 {
                     MenuItem deleteItem = new MenuItem { Header = "删除文件夹" };
@@ -596,12 +599,11 @@ namespace Lume
 
                 folderBorder.MouseLeftButtonDown += (s, e) =>
                 {
-                    // 如果点击的是不同的文件夹，必须先处理当前正在编辑的笔记
                     if (currentFolderPath != folder)
                     {
-                        if (isDirty) SaveNote(); // 如果有修改，先保存
-                        currentFilePath = null;  // 清除当前文件路径
-                        ShowEditor(false);       // 关闭编辑器，显示“单击此处新建笔记”
+                        if (isDirty) SaveNote();
+                        currentFilePath = null;
+                        ShowEditor(false);
                     }
 
                     currentFolderPath = folder;
@@ -609,46 +611,66 @@ namespace Lume
                     LoadNotes(folder);
                 };
 
-                TextBlock text = new TextBlock
+                // Grid 布局：第 0 列放固定图标 📁，第 1 列放名称/输入框
+                Grid itemGrid = new Grid();
+                itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                TextBlock iconText = new TextBlock
                 {
-                    Text = "📁 " + folderName,
+                    Text = "📁 ",
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51))
+                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
+                    VerticalAlignment = VerticalAlignment.Center
                 };
+                Grid.SetColumn(iconText, 0);
+
+                TextBlock nameText = new TextBlock
+                {
+                    Text = folderName,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(nameText, 1);
 
                 TextBox editBox = new TextBox
                 {
                     Text = folderName,
                     Visibility = Visibility.Collapsed,
-                    MaxLength = 64, // 限制最大长度64字
+                    MaxLength = 64,
                     FontWeight = FontWeights.SemiBold,
+                    FontSize = nameText.FontSize,
+                    Foreground = nameText.Foreground,
                     BorderThickness = new Thickness(0),
-                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
+                    Background = System.Windows.Media.Brushes.Transparent,
+                    Padding = new Thickness(0),
+                    Margin = new Thickness(0),
                     VerticalAlignment = VerticalAlignment.Center
                 };
+                Grid.SetColumn(editBox, 1);
 
-                Grid itemGrid = new Grid();
-                itemGrid.Children.Add(text);
+                itemGrid.Children.Add(iconText);
+                itemGrid.Children.Add(nameText);
                 itemGrid.Children.Add(editBox);
                 folderBorder.Child = itemGrid;
 
-                // 【关键保护逻辑】：只有不是默认文件夹，才允许重命名
                 if (!isDefaultFolder)
                 {
                     MenuItem renameItem = new MenuItem { Header = "重命名" };
                     renameItem.Click += (s, e) =>
                     {
-                        text.Visibility = Visibility.Collapsed;
+                        nameText.Visibility = Visibility.Collapsed;
                         editBox.Visibility = Visibility.Visible;
                         editBox.Focus();
                         editBox.SelectAll();
                     };
-                    ctx.Items.Insert(0, renameItem); // 插入到右键菜单最上面
+                    ctx.Items.Insert(0, renameItem);
 
-                    // 失去焦点（点击外面）或按下回车时，执行保存逻辑
                     editBox.LostFocus += (s, e) =>
                     {
-                        text.Visibility = Visibility.Visible;
+                        nameText.Visibility = Visibility.Visible;
                         editBox.Visibility = Visibility.Collapsed;
 
                         string newName = editBox.Text.Trim();
@@ -656,7 +678,6 @@ namespace Lume
 
                         if (string.IsNullOrEmpty(newName) || newName == oldName) return;
 
-                        // 正则过滤：只允许汉字、字母、数字、空格、下划线、连字符
                         if (!Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
                         {
                             MessageBox.Show("名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -674,16 +695,14 @@ namespace Lume
 
                         try
                         {
-                            Directory.Move(folder, newFolderPath); // 修改本地文件夹名称
+                            Directory.Move(folder, newFolderPath);
 
-                            // 如果重命名的是当前正在使用的文件夹，同步更新全局变量
                             if (currentFolderPath == folder) currentFolderPath = newFolderPath;
                             if (currentFilePath != null && currentFilePath.StartsWith(folder))
                             {
                                 currentFilePath = Path.Combine(newFolderPath, Path.GetFileName(currentFilePath));
                             }
 
-                            // 延迟刷新以防止 UI 线程冲突
                             Application.Current.Dispatcher.BeginInvoke(new Action(() => {
                                 LoadFolders();
                                 if (currentFolderPath == newFolderPath) LoadNotes(currentFolderPath);
@@ -696,19 +715,18 @@ namespace Lume
                         }
                     };
 
-                    // 按键支持：按 Enter 保存，按 Esc 取消
                     editBox.KeyDown += (s, e) =>
                     {
                         if (e.Key == Key.Enter)
                         {
-                            e.Handled = true; // 阻止默认按键行为
-                            this.Focus();     // 强行把焦点转移给主窗口，100% 触发 LostFocus 执行保存
+                            e.Handled = true;
+                            this.Focus();
                         }
                         else if (e.Key == Key.Escape)
                         {
                             e.Handled = true;
-                            editBox.Text = Path.GetFileName(folder); // 恢复原名
-                            this.Focus();     // 移走焦点取消编辑
+                            editBox.Text = Path.GetFileName(folder);
+                            this.Focus();
                         }
                     };
                 }
