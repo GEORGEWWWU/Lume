@@ -6,7 +6,8 @@
         ResizeMode="CanResize"
         Background="#FFFFFF"
         WindowStartupLocation="CenterScreen"
-        PreviewMouseDown="Window_PreviewMouseDown">
+        PreviewMouseDown="Window_PreviewMouseDown"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0"

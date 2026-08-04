@@ -14,6 +14,7 @@ namespace Lume
         private NoteData currentNote;
         private TextBlock currentNoteListTitleUI;
         private bool isDirty = false;
+        private bool isLoadingNote = false; // 新增：标记是否正在用代码加载笔记
         private string rootWorkspacePath;
         private string currentFolderPath; // 当前选中的文件夹
         private string itemToDeletePath;  // 待删除的文件或文件夹路径
@@ -368,10 +369,11 @@ namespace Lume
 
         private void LoadNote()
         {
+            isLoadingNote = true; // 加载开始，打开开关，拦截事件
+
             currentNote = LumeFileManager.OpenLumeFile(currentFilePath);
             NoteTitleBox.Text = currentNote.Title;
 
-            // 【必须添加的致命修复】：在加载任何内容前，先清空旧内容！
             NoteEditor.Document.Blocks.Clear();
 
             if (!string.IsNullOrEmpty(currentNote.ContentRtf))
@@ -384,11 +386,16 @@ namespace Lume
             }
             else
             {
-                // 【细节修复】：如果是空笔记，必须塞入一个空段落，强制清空边距
                 NoteEditor.Document.Blocks.Add(new Paragraph { Margin = new Thickness(0) });
             }
 
             isDirty = false;
+
+            // 获取文件的最后修改时间来展示
+            DateTime lastWriteTime = File.GetLastWriteTime(currentFilePath);
+            StatusText.Text = $"最后编辑于 {lastWriteTime:yyyy/MM/dd HH:mm}";
+
+            isLoadingNote = false; // 加载结束，关闭开关
         }
 
         // 监听全局鼠标点击，判断是否点到了外部
@@ -419,6 +426,27 @@ namespace Lume
             }
         }
 
+        // 监听全局键盘事件，拦截 Ctrl + S
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // 判断是否按下了 Ctrl 键和 S 键
+            if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                // 只有当编辑器处于显示状态，且笔记被修改过才进行保存
+                if (EditorContainer.Visibility == Visibility.Visible && isDirty)
+                {
+                    SaveNote();
+
+                    // 【可选体验优化】：如果你希望 Ctrl+S 后和点击外部一样失去焦点，可以取消下面两行的注释
+                    // Keyboard.ClearFocus();
+                    // this.Focus();
+                }
+
+                // 标记事件已处理，防止其他控件（如 RichTextBox）继续响应此组合键
+                e.Handled = true;
+            }
+        }
+
         private string GetConfigPath()
         {
             // 将最后一次打开的文件路径保存在系统的 AppData 目录下
@@ -429,7 +457,9 @@ namespace Lume
 
         private void Editor_TextChanged(object sender, TextChangedEventArgs e)
         {
-            isDirty = true; // 只要敲了键盘，就标记为已修改
+            if (isLoadingNote) return; // 如果是代码在自动填充内容，直接退出，不执行下面的逻辑
+
+            isDirty = true;
             if (StatusText != null) StatusText.Text = "编辑中 (点击外部空白处即可保存)...";
 
             if (currentNoteListTitleUI != null && NoteTitleBox != null)
