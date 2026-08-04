@@ -19,6 +19,7 @@ namespace Lume
         private string currentFolderPath; // 当前选中的文件夹
         private string itemToDeletePath;  // 待删除的文件或文件夹路径
         private bool isDeletingFolder;    // 标记当前删除的是文件夹还是笔记
+        private bool isSidebarOpen = true;
 
         public MainWindow()
         {
@@ -851,6 +852,23 @@ namespace Lume
                 DeleteConfirmDialog.Visibility = Visibility.Collapsed;
                 itemToDeletePath = null;
             }
+        }
+
+        // 文件夹侧边栏切换显示
+        private void BtnToggleSidebar_Click(object sender, RoutedEventArgs e)
+        {
+            isSidebarOpen = !isSidebarOpen;
+
+            // 创建非线性位移动画 (CubicEase)
+            System.Windows.Media.Animation.DoubleAnimation animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = isSidebarOpen ? 200 : 0,           // 展开时 200，折叠时 0
+                Duration = TimeSpan.FromMilliseconds(300), // 动画时长 300 毫秒
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut } // 缓入缓出，极致平滑
+            };
+
+            // 针对 SidebarPanel 的 Width 属性启动动画
+            SidebarPanel.BeginAnimation(FrameworkElement.WidthProperty, animation);
         }
     }
 }

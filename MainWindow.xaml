@@ -106,7 +106,7 @@
         <Style x:Key="MacSearchRing" TargetType="Border">
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="3"/>
-            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="CornerRadius" Value="18"/>
             <Setter Property="Background" Value="Transparent"/>
             <Style.Triggers>
                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
@@ -122,7 +122,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="240"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -151,7 +151,7 @@
                         <Ellipse Width="12" Height="12" Fill="#FFBD2E" Stroke="#DEA123" StrokeThickness="0.5" Margin="8,0,0,0" Cursor="Hand" MouseLeftButtonDown="BtnMinimize_Click" ToolTip="最小化"/>
                         <Ellipse Width="12" Height="12" Fill="#27C93F" Stroke="#1AAB29" StrokeThickness="0.5" Margin="8,0,0,0" Cursor="Hand" MouseLeftButtonDown="BtnMaximize_Click" ToolTip="最大化"/>
 
-                        <Button Style="{StaticResource LiquidCircleBtn}" Margin="15,0,0,0" ToolTip="切换边栏">
+                        <Button Style="{StaticResource LiquidCircleBtn}" Click="BtnToggleSidebar_Click" Margin="15,0,0,0" ToolTip="切换边栏">
                             <Path Data="M3,4 L13,4 C14.6,4 16,5.4 16,7 L16,13 C16,14.6 14.6,16 13,16 L3,16 C1.4,16 0,14.6 0,13 L0,7 C0,5.4 1.4,4 3,4 Z M5.5,4 L5.5,16" 
                                   Stroke="#555" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform" Width="14" Height="12"/>
                         </Button>
@@ -207,8 +207,8 @@
                                   Stroke="#555" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform" Width="13" Height="15"/>
                         </Button>
 
-                        <Border Style="{StaticResource MacSearchRing}" Width="160" Height="32">
-                            <Border Background="#F4F4F4" CornerRadius="16" BorderBrush="#EAEAEA" BorderThickness="1">
+                        <Border x:Name="SearchRing" Style="{StaticResource MacSearchRing}" Width="160" Height="32">
+                            <Border Background="#F4F4F4" CornerRadius="15" BorderBrush="#EAEAEA" BorderThickness="1">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="28"/>
@@ -216,7 +216,23 @@
                                     </Grid.ColumnDefinitions>
                                     <Path Grid.Column="0" Data="M10,10 L14,14 M6,11 A5,5 0 1,1 6,1 A5,5 0 1,1 6,11 Z" 
                                           Stroke="#888" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="12" Height="12" HorizontalAlignment="Center"/>
-                                    <TextBox Grid.Column="1" Text="Search" Foreground="#888" Background="Transparent" BorderThickness="0" VerticalAlignment="Center" FontSize="13" Margin="0,0,10,0"/>
+
+                                    <Grid Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <TextBlock Text="Search" Foreground="#A0A0A0" FontSize="13" VerticalAlignment="Center" Margin="2,0,0,0" IsHitTestVisible="False">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+
+                                        <TextBox x:Name="SearchTextBox" Text="" Foreground="#555" Background="Transparent" BorderThickness="0" FontSize="13" VerticalAlignment="Center"/>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </Border>
@@ -226,7 +242,7 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Grid.Column="0" Background="#F5F5F7" BorderBrush="#E5E5E5" BorderThickness="0,0,1,0">
+        <Border x:Name="SidebarPanel" Width="200" Grid.Row="1" Grid.Column="0" Background="#F5F5F7" BorderBrush="#E5E5E5" BorderThickness="0,0,1,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
