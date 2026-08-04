@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="Assets\lume.ico" />
+    <Resource Include="Assets\lume.ico" />
   </ItemGroup>
 
 </Project>

@@ -173,7 +173,7 @@ namespace Lume
             BtnAddNote_Click(null, null);
         }
 
-        private void BtnAddNote_Click(object sender, MouseButtonEventArgs e)
+        private void BtnAddNote_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(currentFolderPath))
             {
