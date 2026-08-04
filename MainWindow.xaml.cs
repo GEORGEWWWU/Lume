@@ -402,6 +402,20 @@ namespace Lume
         // 监听全局鼠标点击，判断是否点到了外部
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // 处理搜索框的外部点击失焦
+            if (SearchTextBox != null && SearchTextBox.IsFocused)
+            {
+                // 获取鼠标相对于 SearchRing (外圈边框) 的坐标
+                Point pos = e.GetPosition(SearchRing);
+
+                // 如果鼠标点击在搜索框外面，立刻清理焦点
+                if (pos.X < 0 || pos.Y < 0 || pos.X > SearchRing.ActualWidth || pos.Y > SearchRing.ActualHeight)
+                {
+                    Keyboard.ClearFocus();
+                    this.Focus();
+                }
+            }
+
             // 只要编辑器可见，点击外侧就应该清除焦点（取消原本外层对 && isDirty 的强依赖）
             if (EditorContainer.Visibility == Visibility.Visible)
             {
