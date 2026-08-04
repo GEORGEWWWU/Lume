@@ -264,10 +264,14 @@ namespace Lume
 
                 StackPanel cardStack = new StackPanel();
 
-                // 创建日期文本
+                // 获取该笔记文件的最后编辑时间
+                DateTime lastWriteTime = File.GetLastWriteTime(file);
+
+                // 创建日期文本并应用新格式
                 TextBlock dateText = new TextBlock
                 {
-                    Text = noteData.DateCreated,
+                    // 将时间格式化为你想要的 "2026年8月5日 23:28" 样式
+                    Text = lastWriteTime.ToString("yyyy年M月d日 HH:mm"),
                     Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(153, 153, 153)),
                     FontSize = 12,
                     Margin = new Thickness(0, 5, 0, 0)
@@ -407,6 +411,14 @@ namespace Lume
             // 获取文件的最后修改时间来展示
             DateTime lastWriteTime = File.GetLastWriteTime(currentFilePath);
             StatusText.Text = $"最后编辑于 {lastWriteTime:yyyy/MM/dd HH:mm}";
+
+            // 提取该笔记所在的文件夹名称并显示
+            if (!string.IsNullOrEmpty(currentFilePath))
+            {
+                // 通过物理路径反推它属于哪个文件夹
+                string parentFolderName = Path.GetFileName(Path.GetDirectoryName(currentFilePath));
+                FolderPathText.Text = $"归档于 {parentFolderName}";
+            }
 
             isLoadingNote = false; // 加载结束，关闭开关
         }

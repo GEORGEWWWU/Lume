@@ -291,6 +291,8 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
+                    <TextBlock x:Name="FolderPathText" Text="归档于..." Grid.Row="0" Foreground="#AAA" HorizontalAlignment="Left" FontSize="11"/>
+
                     <TextBlock x:Name="StatusText" Text="编辑中..." Grid.Row="0" Foreground="#AAA" HorizontalAlignment="Right" FontSize="11"/>
 
                     <TextBox x:Name="NoteTitleBox" Grid.Row="1" Text="新笔记" FontSize="28" FontWeight="Bold" 
