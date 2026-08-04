@@ -226,8 +226,12 @@ namespace Lume
                                      .OrderByDescending(f => f.CreationTime)
                                      .Select(f => f.FullName);
 
+            int noteCount = 0; // 新增：用于计数
+
             foreach (string file in noteFiles)
             {
+                noteCount++;
+
                 NoteData noteData = LumeFileManager.OpenLumeFile(file);
 
                 // 检查当前循环到的笔记，是不是正在编辑的那个
@@ -365,6 +369,14 @@ namespace Lume
 
                 cardBorder.Child = cardStack;
                 NoteListPanel.Children.Add(cardBorder);
+            }
+
+            // 统计整个工作区（包含所有文件夹）里的笔记总篇数
+            if (TopNoteCountText != null && !string.IsNullOrEmpty(rootWorkspacePath) && Directory.Exists(rootWorkspacePath))
+            {
+                // SearchOption.AllDirectories 会自动检索根工作区下所有子文件夹里的 .lume 文件
+                int totalAllNotesCount = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories).Length;
+                TopNoteCountText.Text = $"{totalAllNotesCount} notes";
             }
         }
 
