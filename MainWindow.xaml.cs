@@ -21,10 +21,14 @@ namespace Lume
         private bool isDeletingFolder;    // 标记当前删除的是文件夹还是笔记
         private bool isSidebarOpen = true;
         private const string VIRTUAL_EXTERNAL_FOLDER = "VIRTUAL_EXTERNAL"; // 虚拟文件夹标识
+        private System.Windows.Threading.DispatcherTimer searchTimer;
 
         public MainWindow()
         {
             InitializeComponent();
+
+            // 给编辑器加上粘贴拦截器
+            DataObject.AddPastingHandler(NoteEditor, NoteEditor_Pasting);
 
             // 1. 初始化工作区目录
             rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
@@ -59,8 +63,19 @@ namespace Lume
                 }
             }
 
-            // 3. 【修改这里】：强制传入 null，确保启动时绝对不会选中和打开任何笔记
+            // 3. 强制传入 null，确保启动时绝对不会选中和打开任何笔记
             SetupEnvironment(null);
+
+            searchTimer = new System.Windows.Threading.DispatcherTimer();
+            searchTimer.Interval = TimeSpan.FromMilliseconds(400); // 停止打字 400 毫秒后才执行搜索
+            searchTimer.Tick += (s, args) =>
+            {
+                searchTimer.Stop();
+                if (!string.IsNullOrEmpty(currentFolderPath))
+                {
+                    LoadNotes(currentFolderPath);
+                }
+            };
         }
 
         public MainWindow(string openedFilePath)
@@ -147,6 +162,27 @@ namespace Lume
             else
             {
                 ShowEditor(false);
+            }
+        }
+
+        private void NoteEditor_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            // 改用 UnicodeText，防止中文字符在底层转换时出现编码偏差
+            if (e.DataObject.GetDataPresent(DataFormats.UnicodeText))
+            {
+                string plainText = (string)e.DataObject.GetData(DataFormats.UnicodeText);
+                e.CancelCommand();
+
+                // 使用 InsertTextInRun 代替 Selection.Text
+                // 它会把文本悄悄塞进当前光标所在的格式块中，完美继承当前的字体、颜色和字号
+                NoteEditor.CaretPosition.InsertTextInRun(plainText);
+            }
+            // 为了兼容性，如果只有普通 Text 也处理一下
+            else if (e.DataObject.GetDataPresent(DataFormats.Text))
+            {
+                string plainText = (string)e.DataObject.GetData(DataFormats.Text);
+                e.CancelCommand();
+                NoteEditor.CaretPosition.InsertTextInRun(plainText);
             }
         }
 
@@ -307,10 +343,25 @@ namespace Lume
 
                 cardBorder.MouseLeftButtonDown += (s, e) =>
                 {
+                    // 1. 如果点击的是当前正在编辑的笔记，直接返回，避免重复加载
+                    if (currentFilePath == file) return;
+
+                    // 2. 如果当前有未保存的修改，先保存
+                    if (isDirty) SaveNote();
+
                     currentFilePath = file;
                     LoadNote();
                     ShowEditor(true);
-                    LoadNotes(folderPath);
+
+                    // 3. 告别重载，手动更新 UI 选中状态（极其丝滑）
+                    foreach (var child in NoteListPanel.Children)
+                    {
+                        if (child is Border b)
+                        {
+                            b.Background = System.Windows.Media.Brushes.Transparent;
+                        }
+                    }
+                    cardBorder.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(243, 243, 243));
                 };
 
                 StackPanel cardStack = new StackPanel();
@@ -517,10 +568,10 @@ namespace Lume
 
             isDirty = false; // 保存成功，恢复干净状态
 
-            // 【核心修复1】：保存成功后，强行刷新一遍中间的笔记列表！
-            if (!string.IsNullOrEmpty(currentFolderPath))
+            // 只要更新当前绑定的 UI 标题即可
+            if (currentNoteListTitleUI != null && currentNote != null)
             {
-                LoadNotes(currentFolderPath);
+                currentNoteListTitleUI.Text = string.IsNullOrWhiteSpace(currentNote.Title) ? "无标题笔记" : currentNote.Title;
             }
 
             return true;
@@ -922,15 +973,12 @@ namespace Lume
         {
             if (BtnClearSearch != null)
             {
-                // 如果搜索框有内容，显示 X 按钮；否则隐藏
                 BtnClearSearch.Visibility = string.IsNullOrEmpty(SearchTextBox.Text) ? Visibility.Collapsed : Visibility.Visible;
             }
 
-            // 只要文本变动，就重新调用 LoadNotes。它会自动判断当前是该搜索还是该显示原列表
-            if (!string.IsNullOrEmpty(currentFolderPath))
-            {
-                LoadNotes(currentFolderPath);
-            }
+            // 重置定时器，打字时不会疯狂触发 I/O
+            searchTimer.Stop();
+            searchTimer.Start();
         }
 
         // 点击 X 按钮清空搜索

@@ -307,7 +307,8 @@
                              TextChanged="Editor_TextChanged"/>
 
                     <RichTextBox x:Name="NoteEditor" Grid.Row="2" BorderThickness="0" Background="Transparent"
-                                 TextChanged="Editor_TextChanged" FontSize="15" FontFamily="Segoe UI">
+             TextChanged="Editor_TextChanged" FontSize="15" 
+             FontFamily="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
                         <RichTextBox.Resources>
                             <Style TargetType="{x:Type Paragraph}">
                                 <Setter Property="Margin" Value="0"/>
