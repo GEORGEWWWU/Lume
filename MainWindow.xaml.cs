@@ -928,6 +928,17 @@ namespace Lume
             }
         }
 
+        // 监听删除确认弹窗遮罩层的点击事件
+        private void DeleteConfirmDialog_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // e.OriginalSource 是鼠标真正踩中的 UI 元素
+            // 如果点中的是外层半透明背景（而不是里面的白色对话框卡片或文字按钮），就自动关闭弹窗
+            if (e.OriginalSource == DeleteConfirmDialog)
+            {
+                BtnCancelDelete_Click(sender, e);
+            }
+        }
+
         // 监听搜索框文本实时变化
         private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {

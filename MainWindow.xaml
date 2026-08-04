@@ -321,29 +321,34 @@
             </Grid>
         </Border>
 
-        <Grid x:Name="DeleteConfirmDialog" Visibility="Collapsed" Background="#40000000" Grid.RowSpan="2" Grid.ColumnSpan="3">
-            <Border Background="#F9F9F9" CornerRadius="12" Width="260" Height="140" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid x:Name="DeleteConfirmDialog" Visibility="Collapsed" Background="#40000000" Grid.RowSpan="2" Grid.ColumnSpan="3" MouseLeftButtonDown="DeleteConfirmDialog_MouseDown">
+            <Border Background="#FFFFFF" CornerRadius="22" Width="260" Height="140" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.15" Color="Black"/>
                 </Border.Effect>
                 <Grid>
                     <StackPanel VerticalAlignment="Center" Margin="0,15,0,0">
-                        <TextBlock Text="确认删除吗？" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#333333"/>
-                        <TextBlock Text="此操作将无法撤销。" FontSize="12" HorizontalAlignment="Center" Foreground="#888888" Margin="0,5,0,20"/>
+                        <TextBlock Text="确认回收至垃圾篓吗？" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#333333"/>
+                        <TextBlock Text="此操作将无法撤销！" FontSize="12" HorizontalAlignment="Center" Foreground="#888888" Margin="0,5,0,20"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                             <Button Content="取消" Width="90" Height="30" Margin="0,0,15,0" Background="#E5E5E5" Foreground="#333333" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Click="BtnCancelDelete_Click">
-                                <Button.Resources>
-                                    <Style TargetType="Border">
-                                        <Setter Property="CornerRadius" Value="6"/>
-                                    </Style>
-                                </Button.Resources>
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="6">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
                             </Button>
+
                             <Button Content="删除" Width="90" Height="30" Background="#FF3B30" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Click="BtnConfirmDelete_Click">
-                                <Button.Resources>
-                                    <Style TargetType="Border">
-                                        <Setter Property="CornerRadius" Value="6"/>
-                                    </Style>
-                                </Button.Resources>
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="6">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
                             </Button>
                         </StackPanel>
                     </StackPanel>
