@@ -56,27 +56,30 @@ namespace Lume
             {
                 string extension = ".lume";
                 string progId = "Lume.NoteFile";
-                // 获取当前运行的 Lume.exe 的完整绝对路径
                 string exePath = Process.GetCurrentProcess().MainModule.FileName;
 
-                // 1. 在当前用户注册表中，将 .lume 扩展名指向我们的 ProgID
+                // 1. 在当前用户注册表中，将 .lume 扩展名指向 ProgID，并添加 ShellNew 支持右键新建
                 using (RegistryKey extKey = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{extension}"))
                 {
                     extKey.SetValue("", progId);
+
+                    // 核心：右键菜单“新建”选项
+                    using (RegistryKey shellNewKey = extKey.CreateSubKey("ShellNew"))
+                    {
+                        shellNewKey.SetValue("NullFile", "");
+                    }
                 }
 
-                // 2. 设置 ProgID 的具体信息（显示名称、图标、打开命令）
+                // 2. 设置 ProgID（类型名称、图标、打开命令）
                 using (RegistryKey progIdKey = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{progId}"))
                 {
-                    progIdKey.SetValue("", "Lume 笔记文件"); // 文件类型描述
+                    progIdKey.SetValue("", "Lume 笔记文件");
 
-                    // 设置默认图标 (直接使用你的 exe 自带图标)
                     using (RegistryKey iconKey = progIdKey.CreateSubKey("DefaultIcon"))
                     {
                         iconKey.SetValue("", $"\"{exePath}\",0");
                     }
 
-                    // 设置双击时的打开命令，%1 代表传进来的文件路径
                     using (RegistryKey cmdKey = progIdKey.CreateSubKey(@"shell\open\command"))
                     {
                         cmdKey.SetValue("", $"\"{exePath}\" \"%1\"");
@@ -85,7 +88,7 @@ namespace Lume
             }
             catch (Exception)
             {
-                // 写入注册表可能会因为权限问题失败，普通用户环境一般没问题，这里静默吞掉异常即可
+                // 静默吞掉无权限引发的异常
             }
         }
     }

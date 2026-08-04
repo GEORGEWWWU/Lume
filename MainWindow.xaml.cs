@@ -20,6 +20,7 @@ namespace Lume
         private string itemToDeletePath;  // 待删除的文件或文件夹路径
         private bool isDeletingFolder;    // 标记当前删除的是文件夹还是笔记
         private bool isSidebarOpen = true;
+        private const string VIRTUAL_EXTERNAL_FOLDER = "VIRTUAL_EXTERNAL"; // 虚拟文件夹标识
 
         public MainWindow()
         {
@@ -80,7 +81,6 @@ namespace Lume
         {
             currentFilePath = openedFilePath;
 
-            // 防御性校验：确保 rootWorkspacePath 绝对不为 null
             if (string.IsNullOrEmpty(rootWorkspacePath))
             {
                 rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
@@ -90,7 +90,6 @@ namespace Lume
                 }
             }
 
-            // 【强制拦截 1】：确保 LumeWorkspace 里必须有文件夹，如果没有，必须建一个！
             string[] folders = Directory.GetDirectories(rootWorkspacePath);
             if (folders.Length == 0)
             {
@@ -98,44 +97,31 @@ namespace Lume
                 folders = Directory.GetDirectories(rootWorkspacePath);
             }
 
-            // 【强制拦截 2】：判断打开的笔记到底是不是在我们合法的文件夹里？
             if (!string.IsNullOrEmpty(currentFilePath) && File.Exists(currentFilePath))
             {
                 string noteFolder = Path.GetDirectoryName(currentFilePath);
 
+                // 判断文件是否在 Lume 工作区内
                 if (noteFolder.StartsWith(rootWorkspacePath, StringComparison.OrdinalIgnoreCase))
                 {
                     currentFolderPath = noteFolder;
                 }
                 else
                 {
-                    currentFolderPath = folders[0];
+                    // 外部打开的文件：原位不动！仅添加到外部历史记录，并切换到虚拟分类
+                    AddExternalNotePath(currentFilePath);
+                    currentFolderPath = VIRTUAL_EXTERNAL_FOLDER;
                 }
             }
             else
             {
-                // 正常启动（传入null时走到这里）
-                // 【修改这里】：如果读出来的 currentFolderPath 为空，或者文件夹已经被删了、不合法，才强制退回到第一个文件夹
                 if (string.IsNullOrEmpty(currentFolderPath) ||
-                    !Directory.Exists(currentFolderPath) ||
-                    !currentFolderPath.StartsWith(rootWorkspacePath, StringComparison.OrdinalIgnoreCase))
+                    (!Directory.Exists(currentFolderPath) && currentFolderPath != VIRTUAL_EXTERNAL_FOLDER) ||
+                    (!currentFolderPath.StartsWith(rootWorkspacePath, StringComparison.OrdinalIgnoreCase) && currentFolderPath != VIRTUAL_EXTERNAL_FOLDER))
                 {
                     currentFolderPath = folders[0];
                 }
             }
-
-            // 【强制拦截 3】：为了防止路径大小写不一致导致高亮失败，做一次严格匹配
-            bool isValid = false;
-            foreach (string f in folders)
-            {
-                if (string.Equals(f, currentFolderPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    currentFolderPath = f;
-                    isValid = true;
-                    break;
-                }
-            }
-            if (!isValid) currentFolderPath = folders[0]; // 终极兜底：强行绑定！
 
             LoadFolders();
             LoadNotes(currentFolderPath);
@@ -179,6 +165,13 @@ namespace Lume
             // 确保新建笔记时退出搜索状态
             if (SearchTextBox != null) SearchTextBox.Text = "";
 
+            // 死守拦截虚拟文件夹
+            if (currentFolderPath == VIRTUAL_EXTERNAL_FOLDER)
+            {
+                MessageBox.Show("「外部笔记」仅用于查看历史记录，无法在此处直接新建笔记！\n请在左侧选择一个普通文件夹。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             if (string.IsNullOrEmpty(currentFolderPath))
             {
                 MessageBox.Show("请先在左侧选择或创建一个文件夹！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -221,27 +214,34 @@ namespace Lume
         private void LoadNotes(string folderPath)
         {
             NoteListPanel.Children.Clear();
-            if (string.IsNullOrEmpty(rootWorkspacePath) || !Directory.Exists(rootWorkspacePath)) return;
+            if (string.IsNullOrEmpty(rootWorkspacePath)) return;
+
+            // 根据当前文件夹类型，动态隐藏/显示新建按钮
+            bool isVirtualFolder = (folderPath == VIRTUAL_EXTERNAL_FOLDER);
+            if (BtnAddNoteText != null) BtnAddNoteText.Visibility = isVirtualFolder ? Visibility.Collapsed : Visibility.Visible;
+            if (BtnTopAddNote != null) BtnTopAddNote.Visibility = isVirtualFolder ? Visibility.Collapsed : Visibility.Visible;
 
             string keyword = SearchTextBox?.Text?.Trim();
             bool isSearchMode = !string.IsNullOrEmpty(keyword);
 
             IEnumerable<string> noteFiles;
 
-            // 顶部标题始终固定显示 "All Lume"
             if (TopFolderNameText != null) TopFolderNameText.Text = "All Lume";
 
             if (isSearchMode)
             {
-                // 搜索模式：无视文件夹，直接获取整个工作区下的所有笔记文件
                 noteFiles = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories)
-                                     .Select(f => new FileInfo(f))
-                                     .OrderByDescending(f => f.CreationTime)
-                                     .Select(f => f.FullName);
+                                     .Concat(GetExternalNotePaths())
+                                     .Where(f => File.Exists(f))
+                                     .Distinct();
+            }
+            else if (folderPath == VIRTUAL_EXTERNAL_FOLDER)
+            {
+                // 虚拟外部笔记：直接读取历史记录中真实存在的外部文件路径
+                noteFiles = GetExternalNotePaths().Where(f => File.Exists(f));
             }
             else
             {
-                // 正常模式：只读取当前选中文件夹下的笔记
                 if (!Directory.Exists(folderPath)) return;
                 noteFiles = Directory.GetFiles(folderPath, "*.lume")
                                      .Select(f => new FileInfo(f))
@@ -255,23 +255,16 @@ namespace Lume
             {
                 NoteData noteData = LumeFileManager.OpenLumeFile(file);
 
-                // 搜索过滤逻辑
                 if (isSearchMode)
                 {
-                    // 1. 匹配标题
                     bool matchTitle = !string.IsNullOrEmpty(noteData.Title) && noteData.Title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
-
-                    // 2. 匹配正文（先将 RTF 转换为纯文本，再进行搜索，避免匹配到隐藏格式代码）
                     string plainText = ExtractTextFromRtf(noteData.ContentRtf);
                     bool matchContent = !string.IsNullOrEmpty(plainText) && plainText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
 
-                    // 标题和纯文本内容都没命中，跳过这篇笔记，不生成卡片
                     if (!matchTitle && !matchContent) continue;
                 }
 
                 noteCount++;
-
-                // 检查当前循环到的笔记，是不是正在编辑的那个
                 bool isSelected = (file == currentFilePath);
 
                 Border cardBorder = new Border
@@ -285,9 +278,28 @@ namespace Lume
                 };
 
                 ContextMenu ctx = new ContextMenu();
-                MenuItem deleteItem = new MenuItem { Header = "删除笔记" };
-                deleteItem.Click += (s, e) => ShowDeleteDialog(file, false);
-                ctx.Items.Add(deleteItem);
+                if (folderPath == VIRTUAL_EXTERNAL_FOLDER)
+                {
+                    // 外部笔记支持从列表中移除历史记录
+                    MenuItem removeRecordItem = new MenuItem { Header = "从列表中移除记录" };
+                    removeRecordItem.Click += (s, e) =>
+                    {
+                        RemoveExternalNotePath(file);
+                        if (currentFilePath == file)
+                        {
+                            currentFilePath = null;
+                            ShowEditor(false);
+                        }
+                        LoadNotes(folderPath);
+                    };
+                    ctx.Items.Add(removeRecordItem);
+                }
+                else
+                {
+                    MenuItem deleteItem = new MenuItem { Header = "删除笔记" };
+                    deleteItem.Click += (s, e) => ShowDeleteDialog(file, false);
+                    ctx.Items.Add(deleteItem);
+                }
                 cardBorder.ContextMenu = ctx;
 
                 cardBorder.MouseLeftButtonDown += (s, e) =>
@@ -295,13 +307,12 @@ namespace Lume
                     currentFilePath = file;
                     LoadNote();
                     ShowEditor(true);
-                    LoadNotes(folderPath); // 点击后重新渲染列表更新高亮（它会自动判断当前是否还在搜索模式）
+                    LoadNotes(folderPath);
                 };
 
                 StackPanel cardStack = new StackPanel();
-
-                // 获取该笔记文件的最后编辑时间 (你之前加的功能，已保留)
                 DateTime lastWriteTime = File.GetLastWriteTime(file);
+
                 TextBlock dateText = new TextBlock
                 {
                     Text = lastWriteTime.ToString("yyyy年M月d日 HH:mm"),
@@ -317,112 +328,21 @@ namespace Lume
                     TextTrimming = TextTrimming.CharacterEllipsis
                 };
 
-                TextBox titleEditBox = new TextBox
-                {
-                    Text = noteData.Title,
-                    Visibility = Visibility.Collapsed,
-                    MaxLength = 64,
-                    FontWeight = FontWeights.Bold,
-                    FontSize = titleText.FontSize,
-                    Foreground = titleText.Foreground,
-                    BorderThickness = new Thickness(0),
-                    Background = System.Windows.Media.Brushes.Transparent,
-                    Padding = new Thickness(0),
-                    Margin = new Thickness(0),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-
-                Grid titleGrid = new Grid();
-                titleGrid.Children.Add(titleText);
-                titleGrid.Children.Add(titleEditBox);
-
-                // 笔记重命名右键菜单
-                MenuItem renameNoteItem = new MenuItem { Header = "重命名" };
-                renameNoteItem.Click += (s, e) =>
-                {
-                    titleText.Visibility = Visibility.Collapsed;
-                    titleEditBox.Visibility = Visibility.Visible;
-                    titleEditBox.Focus();
-                    titleEditBox.SelectAll();
-                };
-                ctx.Items.Insert(0, renameNoteItem);
-
-                // 失去焦点（点击外部）时自动保存标题
-                titleEditBox.LostFocus += (s, e) =>
-                {
-                    titleText.Visibility = Visibility.Visible;
-                    titleEditBox.Visibility = Visibility.Collapsed;
-
-                    string newName = titleEditBox.Text.Trim();
-                    if (string.IsNullOrEmpty(newName) || newName == noteData.Title)
-                    {
-                        titleEditBox.Text = noteData.Title;
-                        return;
-                    }
-
-                    if (!System.Text.RegularExpressions.Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
-                    {
-                        MessageBox.Show("笔记名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        titleEditBox.Text = noteData.Title;
-                        return;
-                    }
-
-                    noteData.Title = newName;
-                    LumeFileManager.SaveLumeFile(file, noteData);
-                    titleText.Text = newName;
-
-                    if (file == currentFilePath && NoteTitleBox != null)
-                    {
-                        NoteTitleBox.Text = newName;
-                    }
-                };
-
-                // 按键支持：按 Enter 保存，按 Esc 取消
-                titleEditBox.KeyDown += (s, e) =>
-                {
-                    if (e.Key == Key.Enter)
-                    {
-                        e.Handled = true;
-                        this.Focus();
-                    }
-                    else if (e.Key == Key.Escape)
-                    {
-                        e.Handled = true;
-                        titleEditBox.Text = noteData.Title;
-                        this.Focus();
-                    }
-                };
-
-                if (isSelected)
-                {
-                    currentNoteListTitleUI = titleText;
-                }
-
-                cardStack.Children.Add(titleGrid);
+                cardStack.Children.Add(titleText);
                 cardStack.Children.Add(dateText);
                 cardBorder.Child = cardStack;
                 NoteListPanel.Children.Add(cardBorder);
             }
 
-            // 更新顶部的笔记数量统计文本
             if (TopNoteCountText != null)
             {
-                if (isSearchMode)
-                {
-                    TopNoteCountText.Text = $"{noteCount} 个结果";
-                }
-                else
-                {
-                    // 普通模式下，依然显示全工作区的总笔记数（或者你也可以改成 folderPath 里的数量）
-                    int totalAllNotesCount = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories).Length;
-                    TopNoteCountText.Text = $"{totalAllNotesCount} notes";
-                }
+                TopNoteCountText.Text = isSearchMode ? $"{noteCount} 个结果" : $"{noteCount} notes";
             }
         }
 
         private void LoadNote()
         {
-            isLoadingNote = true; // 加载开始，打开开关，拦截事件
+            isLoadingNote = true;
 
             currentNote = LumeFileManager.OpenLumeFile(currentFilePath);
             NoteTitleBox.Text = currentNote.Title;
@@ -444,19 +364,24 @@ namespace Lume
 
             isDirty = false;
 
-            // 获取文件的最后修改时间来展示
             DateTime lastWriteTime = File.GetLastWriteTime(currentFilePath);
             StatusText.Text = $"最后编辑于 {lastWriteTime:yyyy/MM/dd HH:mm}";
 
-            // 提取该笔记所在的文件夹名称并显示
             if (!string.IsNullOrEmpty(currentFilePath))
             {
-                // 通过物理路径反推它属于哪个文件夹
-                string parentFolderName = Path.GetFileName(Path.GetDirectoryName(currentFilePath));
-                FolderPathText.Text = $"归档于 {parentFolderName}";
+                if (currentFolderPath == VIRTUAL_EXTERNAL_FOLDER)
+                {
+                    // 外部文件：显示其完整绝对路径
+                    FolderPathText.Text = $"外部文件：{currentFilePath}";
+                }
+                else
+                {
+                    string parentFolderName = Path.GetFileName(Path.GetDirectoryName(currentFilePath));
+                    FolderPathText.Text = $"归档于 {parentFolderName}";
+                }
             }
 
-            isLoadingNote = false; // 加载结束，关闭开关
+            isLoadingNote = false;
         }
 
         // 监听全局鼠标点击，判断是否点到了外部
@@ -861,6 +786,44 @@ namespace Lume
 
                 FolderListPanel.Children.Add(folderBorder);
             }
+
+            // 渲染虚拟文件夹：外部笔记
+            bool isExternalSelected = currentFolderPath == VIRTUAL_EXTERNAL_FOLDER;
+
+            Border externalBorder = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(
+                    isExternalSelected ? System.Windows.Media.Color.FromRgb(225, 225, 225) : System.Windows.Media.Colors.Transparent),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 5, 10, 5),
+                Margin = new Thickness(10, 2, 10, 2),
+                Cursor = Cursors.Hand
+            };
+
+            TextBlock externalText = new TextBlock
+            {
+                Text = "🔗 外部笔记",
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            externalBorder.Child = externalText;
+
+            externalBorder.MouseLeftButtonDown += (s, e) =>
+            {
+                if (currentFolderPath != VIRTUAL_EXTERNAL_FOLDER)
+                {
+                    if (isDirty) SaveNote();
+                    currentFilePath = null;
+                    ShowEditor(false);
+                }
+
+                currentFolderPath = VIRTUAL_EXTERNAL_FOLDER;
+                LoadFolders();
+                LoadNotes(VIRTUAL_EXTERNAL_FOLDER);
+            };
+
+            FolderListPanel.Children.Add(externalBorder);
         }
 
         private void ShowDeleteDialog(string path, bool isFolder)
@@ -999,6 +962,59 @@ namespace Lume
 
             // 针对 SidebarPanel 的 Width 属性启动动画
             SidebarPanel.BeginAnimation(FrameworkElement.WidthProperty, animation);
+        }
+
+        // 获取外部笔记历史记录配置文件路径
+        private string GetExternalNotesConfigPath()
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lume");
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "external_notes.json");
+        }
+
+        // 读取外部笔记路径列表
+        private List<string> GetExternalNotePaths()
+        {
+            string configPath = GetExternalNotesConfigPath();
+            if (File.Exists(configPath))
+            {
+                try
+                {
+                    string json = File.ReadAllText(configPath);
+                    return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                }
+                catch { }
+            }
+            return new List<string>();
+        }
+
+        // 记录一个新的外部笔记路径（置顶展示）
+        private void AddExternalNotePath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return;
+            var list = GetExternalNotePaths();
+
+            // 如果列表中已存在，先移除旧记录再放到最前面
+            list.RemoveAll(p => string.Equals(p, filePath, StringComparison.OrdinalIgnoreCase));
+            list.Insert(0, filePath);
+
+            try
+            {
+                File.WriteAllText(GetExternalNotesConfigPath(), System.Text.Json.JsonSerializer.Serialize(list));
+            }
+            catch { }
+        }
+
+        // 从外部笔记历史中移除
+        private void RemoveExternalNotePath(string filePath)
+        {
+            var list = GetExternalNotePaths();
+            list.RemoveAll(p => string.Equals(p, filePath, StringComparison.OrdinalIgnoreCase));
+            try
+            {
+                File.WriteAllText(GetExternalNotesConfigPath(), System.Text.Json.JsonSerializer.Serialize(list));
+            }
+            catch { }
         }
     }
 }

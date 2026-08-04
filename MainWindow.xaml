@@ -171,7 +171,7 @@
                                   Stroke="#666" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="14" Height="4"/>
                         </Button>
 
-                        <Button Style="{StaticResource LiquidCircleBtn}" Click="BtnAddNote_Click" ToolTip="新建笔记" Margin="0,0,15,0">
+                        <Button x:Name="BtnTopAddNote" Style="{StaticResource LiquidCircleBtn}" Click="BtnAddNote_Click" ToolTip="新建笔记" Margin="0,0,15,0">
                             <Path Data="M12.5,3.5 L14.5,5.5 L7.5,12.5 L4.5,13 L5,10 Z M11,5 L13,7 M3,3 L3,16 C3,16.5 3.5,17 4,17 L17,17 C17.5,17 18,16.5 18,16 L18,8" 
                                   Stroke="#555" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform" Width="14" Height="14"/>
                         </Button>
@@ -276,7 +276,7 @@
 
                 <Grid Grid.Row="0" Margin="15,10,15,5">
                     <TextBlock Text="Notes" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
-                    <TextBlock Text="+" FontSize="24" FontWeight="Bold" Foreground="#333" Cursor="Hand" HorizontalAlignment="Right" MouseLeftButtonDown="BtnAddNote_Click"/>
+                    <TextBlock x:Name="BtnAddNoteText" Text="+" FontSize="24" FontWeight="Bold" Foreground="#333" Cursor="Hand" HorizontalAlignment="Right" MouseLeftButtonDown="BtnAddNote_Click"/>
                 </Grid>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
