@@ -176,6 +176,9 @@ namespace Lume
 
         private void BtnAddNote_Click(object sender, RoutedEventArgs e)
         {
+            // 确保新建笔记时退出搜索状态
+            if (SearchTextBox != null) SearchTextBox.Text = "";
+
             if (string.IsNullOrEmpty(currentFolderPath))
             {
                 MessageBox.Show("请先在左侧选择或创建一个文件夹！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -218,28 +221,61 @@ namespace Lume
         private void LoadNotes(string folderPath)
         {
             NoteListPanel.Children.Clear();
-            if (!Directory.Exists(folderPath)) return;
+            if (string.IsNullOrEmpty(rootWorkspacePath) || !Directory.Exists(rootWorkspacePath)) return;
 
-            // 获取文件列表并按【创建时间倒序】排列，最新创建的在最前面
-            var noteFiles = Directory.GetFiles(folderPath, "*.lume")
+            string keyword = SearchTextBox?.Text?.Trim();
+            bool isSearchMode = !string.IsNullOrEmpty(keyword);
+
+            IEnumerable<string> noteFiles;
+
+            // 顶部标题始终固定显示 "All Lume"
+            if (TopFolderNameText != null) TopFolderNameText.Text = "All Lume";
+
+            if (isSearchMode)
+            {
+                // 搜索模式：无视文件夹，直接获取整个工作区下的所有笔记文件
+                noteFiles = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories)
                                      .Select(f => new FileInfo(f))
                                      .OrderByDescending(f => f.CreationTime)
                                      .Select(f => f.FullName);
+            }
+            else
+            {
+                // 正常模式：只读取当前选中文件夹下的笔记
+                if (!Directory.Exists(folderPath)) return;
+                noteFiles = Directory.GetFiles(folderPath, "*.lume")
+                                     .Select(f => new FileInfo(f))
+                                     .OrderByDescending(f => f.CreationTime)
+                                     .Select(f => f.FullName);
+            }
 
-            int noteCount = 0; // 新增：用于计数
+            int noteCount = 0;
 
             foreach (string file in noteFiles)
             {
-                noteCount++;
-
                 NoteData noteData = LumeFileManager.OpenLumeFile(file);
+
+                // 搜索过滤逻辑
+                if (isSearchMode)
+                {
+                    // 1. 匹配标题
+                    bool matchTitle = !string.IsNullOrEmpty(noteData.Title) && noteData.Title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    // 2. 匹配正文（先将 RTF 转换为纯文本，再进行搜索，避免匹配到隐藏格式代码）
+                    string plainText = ExtractTextFromRtf(noteData.ContentRtf);
+                    bool matchContent = !string.IsNullOrEmpty(plainText) && plainText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    // 标题和纯文本内容都没命中，跳过这篇笔记，不生成卡片
+                    if (!matchTitle && !matchContent) continue;
+                }
+
+                noteCount++;
 
                 // 检查当前循环到的笔记，是不是正在编辑的那个
                 bool isSelected = (file == currentFilePath);
 
                 Border cardBorder = new Border
                 {
-                    // 如果是正在编辑的笔记，使用最浅的淡白色，否则透明（没有背景）
                     Background = new System.Windows.Media.SolidColorBrush(
                         isSelected ? System.Windows.Media.Color.FromRgb(243, 243, 243) : System.Windows.Media.Colors.Transparent),
                     CornerRadius = new CornerRadius(8),
@@ -259,18 +295,15 @@ namespace Lume
                     currentFilePath = file;
                     LoadNote();
                     ShowEditor(true);
-                    LoadNotes(folderPath); // 点击其他笔记时，重新刷新列表以更新高亮
+                    LoadNotes(folderPath); // 点击后重新渲染列表更新高亮（它会自动判断当前是否还在搜索模式）
                 };
 
                 StackPanel cardStack = new StackPanel();
 
-                // 获取该笔记文件的最后编辑时间
+                // 获取该笔记文件的最后编辑时间 (你之前加的功能，已保留)
                 DateTime lastWriteTime = File.GetLastWriteTime(file);
-
-                // 创建日期文本并应用新格式
                 TextBlock dateText = new TextBlock
                 {
-                    // 将时间格式化为你想要的 "2026年8月5日 23:28" 样式
                     Text = lastWriteTime.ToString("yyyy年M月d日 HH:mm"),
                     Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(153, 153, 153)),
                     FontSize = 12,
@@ -327,19 +360,17 @@ namespace Lume
                         return;
                     }
 
-                    if (!Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
                     {
                         MessageBox.Show("笔记名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
                         titleEditBox.Text = noteData.Title;
                         return;
                     }
 
-                    // 只修改内部的标题，不修改底层物理文件名（保持lumeYYMMDD不变）
                     noteData.Title = newName;
                     LumeFileManager.SaveLumeFile(file, noteData);
                     titleText.Text = newName;
 
-                    // 如果重命名的是当前正打开的笔记，右侧大标题同步改变
                     if (file == currentFilePath && NoteTitleBox != null)
                     {
                         NoteTitleBox.Text = newName;
@@ -351,14 +382,14 @@ namespace Lume
                 {
                     if (e.Key == Key.Enter)
                     {
-                        e.Handled = true; // 阻止默认按键行为
-                        this.Focus();     // 强行把焦点转移给主窗口，100% 触发 LostFocus 执行保存
+                        e.Handled = true;
+                        this.Focus();
                     }
                     else if (e.Key == Key.Escape)
                     {
                         e.Handled = true;
-                        titleEditBox.Text = noteData.Title; // 恢复原名
-                        this.Focus();     // 移走焦点取消编辑
+                        titleEditBox.Text = noteData.Title;
+                        this.Focus();
                     }
                 };
 
@@ -367,20 +398,25 @@ namespace Lume
                     currentNoteListTitleUI = titleText;
                 }
 
-                // 组合卡片内容：先放入支持编辑的标题，再放入日期
                 cardStack.Children.Add(titleGrid);
                 cardStack.Children.Add(dateText);
-
                 cardBorder.Child = cardStack;
                 NoteListPanel.Children.Add(cardBorder);
             }
 
-            // 统计整个工作区（包含所有文件夹）里的笔记总篇数
-            if (TopNoteCountText != null && !string.IsNullOrEmpty(rootWorkspacePath) && Directory.Exists(rootWorkspacePath))
+            // 更新顶部的笔记数量统计文本
+            if (TopNoteCountText != null)
             {
-                // SearchOption.AllDirectories 会自动检索根工作区下所有子文件夹里的 .lume 文件
-                int totalAllNotesCount = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories).Length;
-                TopNoteCountText.Text = $"{totalAllNotesCount} notes";
+                if (isSearchMode)
+                {
+                    TopNoteCountText.Text = $"{noteCount} 个结果";
+                }
+                else
+                {
+                    // 普通模式下，依然显示全工作区的总笔记数（或者你也可以改成 folderPath 里的数量）
+                    int totalAllNotesCount = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories).Length;
+                    TopNoteCountText.Text = $"{totalAllNotesCount} notes";
+                }
             }
         }
 
@@ -889,6 +925,51 @@ namespace Lume
             {
                 DeleteConfirmDialog.Visibility = Visibility.Collapsed;
                 itemToDeletePath = null;
+            }
+        }
+
+        // 监听搜索框文本实时变化
+        private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (BtnClearSearch != null)
+            {
+                // 如果搜索框有内容，显示 X 按钮；否则隐藏
+                BtnClearSearch.Visibility = string.IsNullOrEmpty(SearchTextBox.Text) ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            // 只要文本变动，就重新调用 LoadNotes。它会自动判断当前是该搜索还是该显示原列表
+            if (!string.IsNullOrEmpty(currentFolderPath))
+            {
+                LoadNotes(currentFolderPath);
+            }
+        }
+
+        // 点击 X 按钮清空搜索
+        private void BtnClearSearch_Click(object sender, RoutedEventArgs e)
+        {
+            SearchTextBox.Text = "";    // 这会自动触发 TextChanged 事件，恢复原始列表
+            SearchTextBox.Focus();      // 保持焦点在搜索框，方便继续输入
+        }
+
+        // 搜索辅助方法：将带有格式代码的 RTF 转换为纯文本，用于精准搜索
+        private string ExtractTextFromRtf(string rtf)
+        {
+            if (string.IsNullOrEmpty(rtf)) return "";
+            try
+            {
+                // 在内存中虚拟一个文档，利用 WPF 自带的解析器剥离排版代码
+                System.Windows.Documents.FlowDocument doc = new System.Windows.Documents.FlowDocument();
+                System.Windows.Documents.TextRange range = new System.Windows.Documents.TextRange(doc.ContentStart, doc.ContentEnd);
+
+                using (System.IO.MemoryStream ms = new System.IO.MemoryStream(System.Text.Encoding.Default.GetBytes(rtf)))
+                {
+                    range.Load(ms, DataFormats.Rtf);
+                }
+                return range.Text;
+            }
+            catch
+            {
+                return ""; // 解析失败兜底
             }
         }
 

@@ -207,7 +207,7 @@
                                   Stroke="#555" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Stretch="Uniform" Width="13" Height="15"/>
                         </Button>
 
-                        <Border x:Name="SearchRing" Style="{StaticResource MacSearchRing}" Width="160" Height="32">
+                        <Border x:Name="SearchRing" Style="{StaticResource MacSearchRing}" Width="160" Height="35">
                             <Border Background="#F4F4F4" CornerRadius="15" BorderBrush="#EAEAEA" BorderThickness="1">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -218,7 +218,12 @@
                                           Stroke="#888" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="12" Height="12" HorizontalAlignment="Center"/>
 
                                     <Grid Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
-                                        <TextBlock Text="Search" Foreground="#A0A0A0" FontSize="13" VerticalAlignment="Center" Margin="2,0,0,0" IsHitTestVisible="False">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="Search" Foreground="#A0A0A0" FontSize="13" VerticalAlignment="Center" Margin="2,0,0,0" IsHitTestVisible="False">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -231,7 +236,9 @@
                                             </TextBlock.Style>
                                         </TextBlock>
 
-                                        <TextBox x:Name="SearchTextBox" Text="" Foreground="#555" Background="Transparent" BorderThickness="0" FontSize="13" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="SearchTextBox" Grid.Column="0" Text="" Foreground="#555" Background="Transparent" BorderThickness="0" FontSize="13" VerticalAlignment="Center" TextChanged="SearchTextBox_TextChanged"/>
+
+                                        <Button x:Name="BtnClearSearch" Grid.Column="1" Content="✕" FontSize="12" Foreground="#999" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnClearSearch_Click" Visibility="Collapsed" Padding="6,0,0,0"/>
                                     </Grid>
                                 </Grid>
                             </Border>
