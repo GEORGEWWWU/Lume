@@ -77,6 +77,19 @@ namespace Lume
             SetupEnvironment(openedFilePath);
         }
 
+        // 添加这个公开方法，专门用来接收其他进程发来的外部文件
+        public void OpenExternalFile(string filePath)
+        {
+            // 如果当前有没保存的内容，先触发保存逻辑
+            if (isDirty)
+            {
+                SaveNote();
+            }
+
+            // 直接复用你现成的环境初始化代码！
+            SetupEnvironment(filePath);
+        }
+
         private void SetupEnvironment(string openedFilePath)
         {
             currentFilePath = openedFilePath;
@@ -162,10 +175,9 @@ namespace Lume
 
         private void BtnAddNote_Click(object sender, RoutedEventArgs e)
         {
-            // 确保新建笔记时退出搜索状态
             if (SearchTextBox != null) SearchTextBox.Text = "";
 
-            // 死守拦截虚拟文件夹
+            // 拦截虚拟外部笔记分类中的新建操作
             if (currentFolderPath == VIRTUAL_EXTERNAL_FOLDER)
             {
                 MessageBox.Show("「外部笔记」仅用于查看历史记录，无法在此处直接新建笔记！\n请在左侧选择一个普通文件夹。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -178,37 +190,30 @@ namespace Lume
                 return;
             }
 
-            // lumeYYMMDDxx 命名格式
             string dateStr = DateTime.Now.ToString("yyMMdd");
             int seq = 1;
             string newFilePath;
 
             while (true)
             {
-                // 保证两位数序号，例如 01, 02
                 string seqStr = seq.ToString("D2");
                 newFilePath = Path.Combine(currentFolderPath, $"lume{dateStr}{seqStr}.lume");
 
-                if (!File.Exists(newFilePath))
-                {
-                    break; // 找到未被占用的文件名，跳出循环
-                }
+                if (!File.Exists(newFilePath)) break;
                 seq++;
             }
 
-            // 创建空文件并保存
             NoteData newNote = new NoteData { Title = "新笔记", DateCreated = DateTime.Now.ToString("yyyy/MM/dd") };
             LumeFileManager.SaveLumeFile(newFilePath, newNote);
 
-            // 【核心修复4】：必须先告诉系统 currentFilePath 是谁，再去刷新列表
             currentFilePath = newFilePath;
             LoadNote();
             ShowEditor(true);
 
-            LoadNotes(currentFolderPath); // 现在刷新列表，它就会被正确高亮，且连带标题联动！
+            LoadNotes(currentFolderPath);
 
-            NoteTitleBox.Focus();       // 聚焦到标题
-            NoteTitleBox.SelectAll();   // 全选"新笔记"三个字
+            NoteTitleBox.Focus();
+            NoteTitleBox.SelectAll();
         }
 
         private void LoadNotes(string folderPath)
@@ -216,7 +221,7 @@ namespace Lume
             NoteListPanel.Children.Clear();
             if (string.IsNullOrEmpty(rootWorkspacePath)) return;
 
-            // 根据当前文件夹类型，动态隐藏/显示新建按钮
+            // 动态控制：处于外部笔记分类时隐藏新建按钮
             bool isVirtualFolder = (folderPath == VIRTUAL_EXTERNAL_FOLDER);
             if (BtnAddNoteText != null) BtnAddNoteText.Visibility = isVirtualFolder ? Visibility.Collapsed : Visibility.Visible;
             if (BtnTopAddNote != null) BtnTopAddNote.Visibility = isVirtualFolder ? Visibility.Collapsed : Visibility.Visible;
@@ -237,7 +242,6 @@ namespace Lume
             }
             else if (folderPath == VIRTUAL_EXTERNAL_FOLDER)
             {
-                // 虚拟外部笔记：直接读取历史记录中真实存在的外部文件路径
                 noteFiles = GetExternalNotePaths().Where(f => File.Exists(f));
             }
             else
@@ -280,7 +284,6 @@ namespace Lume
                 ContextMenu ctx = new ContextMenu();
                 if (folderPath == VIRTUAL_EXTERNAL_FOLDER)
                 {
-                    // 外部笔记支持从列表中移除历史记录
                     MenuItem removeRecordItem = new MenuItem { Header = "从列表中移除记录" };
                     removeRecordItem.Click += (s, e) =>
                     {
@@ -613,183 +616,22 @@ namespace Lume
             if (FolderListPanel == null) return;
             FolderListPanel.Children.Clear();
 
-            // 【核心优化】：默认文件夹强制置顶；其余文件夹按【创建时间倒序】排列（最新创建的在最上面）
-            var folders = Directory.GetDirectories(rootWorkspacePath)
-                                   .OrderByDescending(f => Path.GetFileName(f) == "默认文件夹")
-                                   .ThenByDescending(f => Directory.GetCreationTime(f));
+            // 1. 获取所有物理文件夹
+            var allFolders = Directory.GetDirectories(rootWorkspacePath);
 
-            foreach (string folder in folders)
+            // 提取“默认文件夹”和其他普通文件夹（普通文件夹按创建时间倒序）
+            string defaultFolder = allFolders.FirstOrDefault(f => Path.GetFileName(f) == "默认文件夹");
+            var otherFolders = allFolders.Where(f => Path.GetFileName(f) != "默认文件夹")
+                                         .OrderByDescending(f => Directory.GetCreationTime(f));
+
+            // ==================== 顺序 1：渲染默认文件夹 ====================
+            if (defaultFolder != null)
             {
-                string folderName = Path.GetFileName(folder);
-                bool isDefaultFolder = folderName == "默认文件夹";
-                bool isSelected = string.Equals(folder, currentFolderPath, StringComparison.OrdinalIgnoreCase);
-
-                Border folderBorder = new Border
-                {
-                    Background = new System.Windows.Media.SolidColorBrush(
-                        isSelected ? System.Windows.Media.Color.FromRgb(225, 225, 225) : System.Windows.Media.Colors.Transparent),
-                    CornerRadius = new CornerRadius(6),
-                    Padding = new Thickness(10, 5, 10, 5),
-                    Margin = new Thickness(10, 2, 10, 2),
-                    Cursor = Cursors.Hand
-                };
-
-                ContextMenu ctx = new ContextMenu();
-
-                if (!isDefaultFolder)
-                {
-                    MenuItem deleteItem = new MenuItem { Header = "删除文件夹" };
-                    deleteItem.Click += (s, e) => ShowDeleteDialog(folder, true);
-                    ctx.Items.Add(deleteItem);
-                }
-                else
-                {
-                    MenuItem lockItem = new MenuItem { Header = "系统默认 (不可修改)", IsEnabled = false };
-                    ctx.Items.Add(lockItem);
-                }
-
-                folderBorder.ContextMenu = ctx;
-
-                folderBorder.MouseLeftButtonDown += (s, e) =>
-                {
-                    if (currentFolderPath != folder)
-                    {
-                        if (isDirty) SaveNote();
-                        currentFilePath = null;
-                        ShowEditor(false);
-                    }
-
-                    currentFolderPath = folder;
-                    LoadFolders();
-                    LoadNotes(folder);
-                };
-
-                // Grid 布局：第 0 列放固定图标 📁，第 1 列放名称/输入框
-                Grid itemGrid = new Grid();
-                itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-                TextBlock iconText = new TextBlock
-                {
-                    Text = "📁 ",
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                Grid.SetColumn(iconText, 0);
-
-                TextBlock nameText = new TextBlock
-                {
-                    Text = folderName,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis
-                };
-                Grid.SetColumn(nameText, 1);
-
-                TextBox editBox = new TextBox
-                {
-                    Text = folderName,
-                    Visibility = Visibility.Collapsed,
-                    MaxLength = 64,
-                    FontWeight = FontWeights.SemiBold,
-                    FontSize = nameText.FontSize,
-                    Foreground = nameText.Foreground,
-                    BorderThickness = new Thickness(0),
-                    Background = System.Windows.Media.Brushes.Transparent,
-                    Padding = new Thickness(0),
-                    Margin = new Thickness(0),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                Grid.SetColumn(editBox, 1);
-
-                itemGrid.Children.Add(iconText);
-                itemGrid.Children.Add(nameText);
-                itemGrid.Children.Add(editBox);
-                folderBorder.Child = itemGrid;
-
-                if (!isDefaultFolder)
-                {
-                    MenuItem renameItem = new MenuItem { Header = "重命名" };
-                    renameItem.Click += (s, e) =>
-                    {
-                        nameText.Visibility = Visibility.Collapsed;
-                        editBox.Visibility = Visibility.Visible;
-                        editBox.Focus();
-                        editBox.SelectAll();
-                    };
-                    ctx.Items.Insert(0, renameItem);
-
-                    editBox.LostFocus += (s, e) =>
-                    {
-                        nameText.Visibility = Visibility.Visible;
-                        editBox.Visibility = Visibility.Collapsed;
-
-                        string newName = editBox.Text.Trim();
-                        string oldName = Path.GetFileName(folder);
-
-                        if (string.IsNullOrEmpty(newName) || newName == oldName) return;
-
-                        if (!Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
-                        {
-                            MessageBox.Show("名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            editBox.Text = oldName;
-                            return;
-                        }
-
-                        string newFolderPath = Path.Combine(rootWorkspacePath, newName);
-                        if (Directory.Exists(newFolderPath))
-                        {
-                            MessageBox.Show("已存在同名文件夹！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            editBox.Text = oldName;
-                            return;
-                        }
-
-                        try
-                        {
-                            Directory.Move(folder, newFolderPath);
-
-                            if (currentFolderPath == folder) currentFolderPath = newFolderPath;
-                            if (currentFilePath != null && currentFilePath.StartsWith(folder))
-                            {
-                                currentFilePath = Path.Combine(newFolderPath, Path.GetFileName(currentFilePath));
-                            }
-
-                            Application.Current.Dispatcher.BeginInvoke(new Action(() => {
-                                LoadFolders();
-                                if (currentFolderPath == newFolderPath) LoadNotes(currentFolderPath);
-                            }));
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("重命名失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                            editBox.Text = oldName;
-                        }
-                    };
-
-                    editBox.KeyDown += (s, e) =>
-                    {
-                        if (e.Key == Key.Enter)
-                        {
-                            e.Handled = true;
-                            this.Focus();
-                        }
-                        else if (e.Key == Key.Escape)
-                        {
-                            e.Handled = true;
-                            editBox.Text = Path.GetFileName(folder);
-                            this.Focus();
-                        }
-                    };
-                }
-
-                FolderListPanel.Children.Add(folderBorder);
+                RenderFolderItem(defaultFolder);
             }
 
-            // 渲染虚拟文件夹：外部笔记
+            // ==================== 顺序 2：渲染“外部笔记”（紧跟默认文件夹） ====================
             bool isExternalSelected = currentFolderPath == VIRTUAL_EXTERNAL_FOLDER;
-
             Border externalBorder = new Border
             {
                 Background = new System.Windows.Media.SolidColorBrush(
@@ -824,6 +666,179 @@ namespace Lume
             };
 
             FolderListPanel.Children.Add(externalBorder);
+
+            // ==================== 顺序 3：渲染其他自定义文件夹 ====================
+            foreach (string folder in otherFolders)
+            {
+                RenderFolderItem(folder);
+            }
+        }
+
+        // 提取的普通文件夹渲染辅助逻辑
+        private void RenderFolderItem(string folder)
+        {
+            string folderName = Path.GetFileName(folder);
+            bool isDefaultFolder = folderName == "默认文件夹";
+            bool isSelected = string.Equals(folder, currentFolderPath, StringComparison.OrdinalIgnoreCase);
+
+            Border folderBorder = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(
+                    isSelected ? System.Windows.Media.Color.FromRgb(225, 225, 225) : System.Windows.Media.Colors.Transparent),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 5, 10, 5),
+                Margin = new Thickness(10, 2, 10, 2),
+                Cursor = Cursors.Hand
+            };
+
+            ContextMenu ctx = new ContextMenu();
+            if (!isDefaultFolder)
+            {
+                MenuItem deleteItem = new MenuItem { Header = "删除文件夹" };
+                deleteItem.Click += (s, e) => ShowDeleteDialog(folder, true);
+                ctx.Items.Add(deleteItem);
+            }
+            else
+            {
+                MenuItem lockItem = new MenuItem { Header = "系统默认 (不可修改)", IsEnabled = false };
+                ctx.Items.Add(lockItem);
+            }
+            folderBorder.ContextMenu = ctx;
+
+            folderBorder.MouseLeftButtonDown += (s, e) =>
+            {
+                if (currentFolderPath != folder)
+                {
+                    if (isDirty) SaveNote();
+                    currentFilePath = null;
+                    ShowEditor(false);
+                }
+
+                currentFolderPath = folder;
+                LoadFolders();
+                LoadNotes(folder);
+            };
+
+            Grid itemGrid = new Grid();
+            itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            TextBlock iconText = new TextBlock
+            {
+                Text = "📁 ",
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(iconText, 0);
+
+            TextBlock nameText = new TextBlock
+            {
+                Text = folderName,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(51, 51, 51)),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(nameText, 1);
+
+            TextBox editBox = new TextBox
+            {
+                Text = folderName,
+                Visibility = Visibility.Collapsed,
+                MaxLength = 64,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = nameText.FontSize,
+                Foreground = nameText.Foreground,
+                BorderThickness = new Thickness(0),
+                Background = System.Windows.Media.Brushes.Transparent,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(editBox, 1);
+
+            itemGrid.Children.Add(iconText);
+            itemGrid.Children.Add(nameText);
+            itemGrid.Children.Add(editBox);
+            folderBorder.Child = itemGrid;
+
+            if (!isDefaultFolder)
+            {
+                MenuItem renameItem = new MenuItem { Header = "重命名" };
+                renameItem.Click += (s, e) =>
+                {
+                    nameText.Visibility = Visibility.Collapsed;
+                    editBox.Visibility = Visibility.Visible;
+                    editBox.Focus();
+                    editBox.SelectAll();
+                };
+                ctx.Items.Insert(0, renameItem);
+
+                editBox.LostFocus += (s, e) =>
+                {
+                    nameText.Visibility = Visibility.Visible;
+                    editBox.Visibility = Visibility.Collapsed;
+
+                    string newName = editBox.Text.Trim();
+                    string oldName = Path.GetFileName(folder);
+
+                    if (string.IsNullOrEmpty(newName) || newName == oldName) return;
+
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(newName, @"^[a-zA-Z0-9\u4e00-\u9fa5_ \-]+$"))
+                    {
+                        MessageBox.Show("名称包含非法特殊符号！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        editBox.Text = oldName;
+                        return;
+                    }
+
+                    string newFolderPath = Path.Combine(rootWorkspacePath, newName);
+                    if (Directory.Exists(newFolderPath))
+                    {
+                        MessageBox.Show("已存在同名文件夹！", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        editBox.Text = oldName;
+                        return;
+                    }
+
+                    try
+                    {
+                        Directory.Move(folder, newFolderPath);
+
+                        if (currentFolderPath == folder) currentFolderPath = newFolderPath;
+                        if (currentFilePath != null && currentFilePath.StartsWith(folder))
+                        {
+                            currentFilePath = Path.Combine(newFolderPath, Path.GetFileName(currentFilePath));
+                        }
+
+                        Application.Current.Dispatcher.BeginInvoke(new Action(() => {
+                            LoadFolders();
+                            if (currentFolderPath == newFolderPath) LoadNotes(currentFolderPath);
+                        }));
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("重命名失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        editBox.Text = oldName;
+                    }
+                };
+
+                editBox.KeyDown += (s, e) =>
+                {
+                    if (e.Key == Key.Enter)
+                    {
+                        e.Handled = true;
+                        this.Focus();
+                    }
+                    else if (e.Key == Key.Escape)
+                    {
+                        e.Handled = true;
+                        editBox.Text = Path.GetFileName(folder);
+                        this.Focus();
+                    }
+                };
+            }
+
+            FolderListPanel.Children.Add(folderBorder);
         }
 
         private void ShowDeleteDialog(string path, bool isFolder)
