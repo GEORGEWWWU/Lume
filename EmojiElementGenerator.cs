@@ -163,33 +163,58 @@ namespace Lume
 
             string emojiText = doc.GetText(offset, emojiEnd - offset);
 
-            float fontSize = 15f;
+            float logicalFontSize = 15f;
             try
             {
-                var tv = CurrentContext.TextView;
-                if (tv != null && tv.DefaultLineHeight > 0)
+                if (CurrentContext != null && CurrentContext.GlobalTextRunProperties != null)
                 {
-                    fontSize = (float)(tv.DefaultLineHeight * 0.72);
-                    if (fontSize < 8) fontSize = 15f;
+                    logicalFontSize = (float)CurrentContext.GlobalTextRunProperties.FontRenderingEmSize;
                 }
             }
             catch { }
 
+            // 🟢 核心 1：保存原始的标准字号，等下用来“锁死”容器高度
+            double originalFontSize = logicalFontSize;
+
+            // 保持你原本的视觉补偿放大
+            logicalFontSize *= 1.08f;
+
             try
             {
-                var bitmap = RenderEmojiWithDirectWrite(emojiText, fontSize);
-                double dpiScale = 96.0 / bitmap.DpiX;
+                float scaleMultiplier = 3.0f;
+                float renderFontSize = logicalFontSize * scaleMultiplier;
+
+                var bitmap = RenderEmojiWithDirectWrite(emojiText, renderFontSize);
+
+                double logicalWidth = bitmap.PixelWidth / scaleMultiplier;
+                double logicalHeight = bitmap.PixelHeight / scaleMultiplier;
 
                 var image = new System.Windows.Controls.Image
                 {
                     Source = bitmap,
-                    Width = bitmap.PixelWidth * dpiScale,
-                    Height = bitmap.PixelHeight * dpiScale,
+                    Width = logicalWidth,
+                    Height = logicalHeight,
                     Stretch = Stretch.Uniform,
-                    VerticalAlignment = VerticalAlignment.Center
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    // 稍微上移一点点对齐文字基线
+                    Margin = new Thickness(0, 0, 0, -1)
                 };
 
-                return new InlineObjectElement(emojiEnd - offset, image);
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+
+                // 🟢 核心 2：用 Grid 包装，施展“障眼法”
+                var wrapper = new System.Windows.Controls.Grid
+                {
+                    Width = logicalWidth + 2,   // 左右留 1px 间距，防止和文字粘连
+                    Height = originalFontSize,  // ⚠️ 强行把测量高度锁死为“标准字号”！
+                    ClipToBounds = false,       // ⚠️ 允许放大的图片微微溢出，不被裁剪
+                    Background = System.Windows.Media.Brushes.Transparent
+                };
+
+                wrapper.Children.Add(image);
+
+                // 返回包装后的 Grid 而不是直接返回 Image
+                return new InlineObjectElement(emojiEnd - offset, wrapper);
             }
             catch
             {
