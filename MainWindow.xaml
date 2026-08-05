@@ -365,7 +365,7 @@
         </Border>
 
         <Border x:Name="RightEditArea" Grid.Row="1" Grid.Column="2" Background="#FFFFFF" MouseDown="EditorArea_MouseDoubleClick">
-            <Grid Margin="30,10,30,20">
+            <Grid Margin="20,10,20,0">
 
                 <TextBlock x:Name="EmptyStateText" Text="单击此处新建笔记" Foreground="#CCCCCC" FontSize="24" FontWeight="Bold" 
                           HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
