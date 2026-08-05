@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.6.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -28,6 +28,9 @@ namespace Lume
         {
             InitializeComponent();
 
+            // 注册彩色 Emoji 渲染器
+            NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
+
             // 1. 初始化工作区目录
             rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
             if (!Directory.Exists(rootWorkspacePath))
@@ -79,6 +82,9 @@ namespace Lume
         public MainWindow(string openedFilePath)
         {
             InitializeComponent();
+
+            // 注册彩色 Emoji 渲染器
+            NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
 
             // 补上工作区路径初始化（防止 rootWorkspacePath 为 null）
             rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
