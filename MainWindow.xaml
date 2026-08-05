@@ -239,7 +239,14 @@
 
                 <Grid Grid.Column="1">
                     <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="15,0,0,0">
-                        <TextBlock x:Name="TopFolderNameText" Text="All Lume" FontSize="13" FontWeight="Bold" Foreground="#333333"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TopFolderNameText" Text="All Lume" FontSize="13" FontWeight="Bold" Foreground="#333333" VerticalAlignment="Center"/>
+
+                            <Border Background="#F2F2F2" BorderBrush="#EAEAEA" BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="VersionText" Text="v1.0.0" FontSize="9" FontWeight="Bold" Foreground="#999999" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+
                         <TextBlock x:Name="TopNoteCountText" Text="0 notes" FontSize="11" Foreground="#999999" Margin="0,1,0,0"/>
                     </StackPanel>
 

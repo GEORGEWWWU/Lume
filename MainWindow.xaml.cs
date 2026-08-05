@@ -27,9 +27,18 @@ namespace Lume
         public MainWindow()
         {
             InitializeComponent();
+            SetupVersionBadge();
 
             // 注册彩色 Emoji 渲染器
             NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
+
+            // 修改文本框选的背景颜色和文本颜色
+            // 设置背景色为淡灰色
+            NoteEditor.TextArea.SelectionBrush = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E8E8E8"));
+            // 移除默认的蓝色细边框
+            NoteEditor.TextArea.SelectionBorder = null;
+            // 强制选中时的文本颜色为深色（黑色或你原本的 #333333），防止字变白看不清！
+            NoteEditor.TextArea.SelectionForeground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black);
 
             // 1. 初始化工作区目录
             rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
@@ -82,9 +91,18 @@ namespace Lume
         public MainWindow(string openedFilePath)
         {
             InitializeComponent();
+            SetupVersionBadge();
 
             // 注册彩色 Emoji 渲染器
             NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
+
+            // 修改文本框选的背景颜色和文本颜色
+            // 设置背景色为淡灰色
+            NoteEditor.TextArea.SelectionBrush = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E8E8E8"));
+            // 移除默认的蓝色细边框
+            NoteEditor.TextArea.SelectionBorder = null;
+            // 强制选中时的文本颜色为深色（黑色或你原本的 #333333），防止字变白看不清！
+            NoteEditor.TextArea.SelectionForeground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Black);
 
             // 补上工作区路径初始化（防止 rootWorkspacePath 为 null）
             rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
@@ -374,7 +392,22 @@ namespace Lume
 
             if (TopNoteCountText != null)
             {
-                TopNoteCountText.Text = isSearchMode ? $"{noteCount} 个结果" : $"{noteCount} notes";
+                if (isSearchMode)
+                {
+                    // 搜索模式下，显示搜索出的结果数量
+                    TopNoteCountText.Text = $"{noteCount} 个结果";
+                }
+                else
+                {
+                    // 正常模式下，强制计算并显示“全局所有笔记”的总数
+                    int globalNoteCount = Directory.GetFiles(rootWorkspacePath, "*.lume", SearchOption.AllDirectories)
+                                         .Concat(GetExternalNotePaths())
+                                         .Where(f => File.Exists(f))
+                                         .Distinct()
+                                         .Count();
+
+                    TopNoteCountText.Text = $"{globalNoteCount} notes";
+                }
             }
         }
 
@@ -1088,6 +1121,19 @@ namespace Lume
                 File.WriteAllText(GetExternalNotesConfigPath(), System.Text.Json.JsonSerializer.Serialize(list));
             }
             catch { }
+        }
+
+        private void SetupVersionBadge()
+        {
+            // 获取当前运行程序的版本信息
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+
+            if (VersionText != null && version != null)
+            {
+                // 格式化输出为主版本.次版本.内部版本（例如：v1.0.0）
+                // 这样可以去掉默认的第4位修订号，看起来更精简
+                VersionText.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+            }
         }
     }
 }
