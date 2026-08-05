@@ -22,6 +22,7 @@ namespace Lume
         private bool isSidebarOpen = true;
         private const string VIRTUAL_EXTERNAL_FOLDER = "VIRTUAL_EXTERNAL"; // 虚拟文件夹标识
         private System.Windows.Threading.DispatcherTimer searchTimer;
+        private bool isSidebarAnimating = false; // 侧边栏动画锁
 
         public MainWindow()
         {
@@ -994,9 +995,12 @@ namespace Lume
         // 文件夹侧边栏切换显示
         private void BtnToggleSidebar_Click(object sender, RoutedEventArgs e)
         {
+            // 【防抖核心】：如果动画还在进行中，直接拦截，无视玩家的“狂点”
+            if (isSidebarAnimating) return;
+
+            isSidebarAnimating = true; // 上锁
             isSidebarOpen = !isSidebarOpen;
 
-            // 创建非线性位移动画 (CubicEase)
             System.Windows.Media.Animation.DoubleAnimation animation = new System.Windows.Media.Animation.DoubleAnimation
             {
                 To = isSidebarOpen ? 200 : 0,
@@ -1004,28 +1008,26 @@ namespace Lume
                 EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
             };
 
-            // 核心黑科技 2.0：尺寸锁定法 (取代之前的 WordWrap 切换)
             if (NoteEditor != null)
             {
                 // 动画开始前，强行将编辑器的宽度“锁死”在当前的实际像素上
-                // 强制靠左对齐，防止动画期间控件在 Grid 容器里居中乱晃
                 NoteEditor.HorizontalAlignment = HorizontalAlignment.Left;
                 NoteEditor.Width = NoteEditor.ActualWidth;
             }
 
-            // 监听动画结束事件
             animation.Completed += (s, ev) =>
             {
                 if (NoteEditor != null)
                 {
-                    // 动画完成后，解除尺寸锁定，恢复 WPF 的自动流式拉伸
-                    // 此时 AvalonEdit 会根据最终的宽度进行【唯一一次】的换行重算，瞬间完成
-                    NoteEditor.Width = double.NaN; // double.NaN 在 WPF 中等同于 Auto
+                    // 动画完成后，解除尺寸锁定
+                    NoteEditor.Width = double.NaN;
                     NoteEditor.HorizontalAlignment = HorizontalAlignment.Stretch;
                 }
+
+                // 【防抖核心】：动画彻底播完，解锁，允许下一次点击
+                isSidebarAnimating = false;
             };
 
-            // 启动侧边栏动画
             SidebarPanel.BeginAnimation(FrameworkElement.WidthProperty, animation);
         }
 
