@@ -27,9 +27,6 @@ namespace Lume
         {
             InitializeComponent();
 
-            // 给编辑器加上粘贴拦截器
-            DataObject.AddPastingHandler(NoteEditor, NoteEditor_Pasting);
-
             // 1. 初始化工作区目录
             rootWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LumeWorkspace");
             if (!Directory.Exists(rootWorkspacePath))
@@ -165,27 +162,6 @@ namespace Lume
             }
         }
 
-        private void NoteEditor_Pasting(object sender, DataObjectPastingEventArgs e)
-        {
-            // 改用 UnicodeText，防止中文字符在底层转换时出现编码偏差
-            if (e.DataObject.GetDataPresent(DataFormats.UnicodeText))
-            {
-                string plainText = (string)e.DataObject.GetData(DataFormats.UnicodeText);
-                e.CancelCommand();
-
-                // 使用 InsertTextInRun 代替 Selection.Text
-                // 它会把文本悄悄塞进当前光标所在的格式块中，完美继承当前的字体、颜色和字号
-                NoteEditor.CaretPosition.InsertTextInRun(plainText);
-            }
-            // 为了兼容性，如果只有普通 Text 也处理一下
-            else if (e.DataObject.GetDataPresent(DataFormats.Text))
-            {
-                string plainText = (string)e.DataObject.GetData(DataFormats.Text);
-                e.CancelCommand();
-                NoteEditor.CaretPosition.InsertTextInRun(plainText);
-            }
-        }
-
         private void ShowEditor(bool isVisible)
         {
             if (isVisible)
@@ -298,7 +274,8 @@ namespace Lume
                 if (isSearchMode)
                 {
                     bool matchTitle = !string.IsNullOrEmpty(noteData.Title) && noteData.Title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
-                    string plainText = ExtractTextFromRtf(noteData.ContentRtf);
+                    // 优先搜新格式，如果为空再去旧 RTF 里捞纯文本
+                    string plainText = !string.IsNullOrEmpty(noteData.ContentText) ? noteData.ContentText : ExtractTextFromRtf(noteData.ContentRtf);
                     bool matchContent = !string.IsNullOrEmpty(plainText) && plainText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
 
                     if (!matchTitle && !matchContent) continue;
@@ -401,19 +378,20 @@ namespace Lume
             currentNote = LumeFileManager.OpenLumeFile(currentFilePath);
             NoteTitleBox.Text = currentNote.Title;
 
-            NoteEditor.Document.Blocks.Clear();
-
-            if (!string.IsNullOrEmpty(currentNote.ContentRtf))
+            // --- AvalonEdit 高性能加载逻辑 ---
+            if (!string.IsNullOrEmpty(currentNote.ContentText))
             {
-                using (MemoryStream ms = new MemoryStream(System.Text.Encoding.Default.GetBytes(currentNote.ContentRtf)))
-                {
-                    TextRange textRange = new TextRange(NoteEditor.Document.ContentStart, NoteEditor.Document.ContentEnd);
-                    textRange.Load(ms, DataFormats.Rtf);
-                }
+                // 优先加载纯文本新格式
+                NoteEditor.Text = currentNote.ContentText;
+            }
+            else if (!string.IsNullOrEmpty(currentNote.ContentRtf))
+            {
+                // 自动兼容并转换旧版的 RTF
+                NoteEditor.Text = ExtractTextFromRtf(currentNote.ContentRtf);
             }
             else
             {
-                NoteEditor.Document.Blocks.Add(new Paragraph { Margin = new Thickness(0) });
+                NoteEditor.Text = "";
             }
 
             isDirty = false;
@@ -425,7 +403,6 @@ namespace Lume
             {
                 if (currentFolderPath == VIRTUAL_EXTERNAL_FOLDER)
                 {
-                    // 外部文件：显示其完整绝对路径
                     FolderPathText.Text = $"外部文件：{currentFilePath}";
                 }
                 else
@@ -522,6 +499,13 @@ namespace Lume
             }
         }
 
+        private void NoteEditor_TextChanged(object sender, EventArgs e)
+        {
+            if (isLoadingNote) return;
+            isDirty = true;
+            if (StatusText != null) StatusText.Text = "编辑中 (点击外部空白处即可保存)...";
+        }
+
         private bool SaveNote()
         {
             if (!isDirty) return true; // 没修改就不保存
@@ -535,12 +519,10 @@ namespace Lume
             if (currentNote == null) currentNote = new NoteData();
             currentNote.Title = NoteTitleBox.Text;
 
-            TextRange textRange = new TextRange(NoteEditor.Document.ContentStart, NoteEditor.Document.ContentEnd);
-            using (MemoryStream ms = new MemoryStream())
-            {
-                textRange.Save(ms, DataFormats.Rtf);
-                currentNote.ContentRtf = System.Text.Encoding.Default.GetString(ms.ToArray());
-            }
+            // --- AvalonEdit 极速保存逻辑 ---
+            // 直接获取文本，抛弃沉重的 RTF 内存流
+            currentNote.ContentText = NoteEditor.Text;
+            currentNote.ContentRtf = ""; // 清空旧的富文本数据，大幅度减小存储体积
 
             if (string.IsNullOrEmpty(currentFilePath))
             {
@@ -566,9 +548,8 @@ namespace Lume
             LumeFileManager.SaveLumeFile(currentFilePath, currentNote);
             StatusText.Text = $"已保存到本地 {DateTime.Now:HH:mm:ss}";
 
-            isDirty = false; // 保存成功，恢复干净状态
+            isDirty = false;
 
-            // 只要更新当前绑定的 UI 标题即可
             if (currentNoteListTitleUI != null && currentNote != null)
             {
                 currentNoteListTitleUI.Text = string.IsNullOrWhiteSpace(currentNote.Title) ? "无标题笔记" : currentNote.Title;
@@ -1018,12 +999,33 @@ namespace Lume
             // 创建非线性位移动画 (CubicEase)
             System.Windows.Media.Animation.DoubleAnimation animation = new System.Windows.Media.Animation.DoubleAnimation
             {
-                To = isSidebarOpen ? 200 : 0,           // 展开时 200，折叠时 0
-                Duration = TimeSpan.FromMilliseconds(300), // 动画时长 300 毫秒
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut } // 缓入缓出，极致平滑
+                To = isSidebarOpen ? 200 : 0,
+                Duration = TimeSpan.FromMilliseconds(300),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
             };
 
-            // 针对 SidebarPanel 的 Width 属性启动动画
+            // 核心黑科技 2.0：尺寸锁定法 (取代之前的 WordWrap 切换)
+            if (NoteEditor != null)
+            {
+                // 动画开始前，强行将编辑器的宽度“锁死”在当前的实际像素上
+                // 强制靠左对齐，防止动画期间控件在 Grid 容器里居中乱晃
+                NoteEditor.HorizontalAlignment = HorizontalAlignment.Left;
+                NoteEditor.Width = NoteEditor.ActualWidth;
+            }
+
+            // 监听动画结束事件
+            animation.Completed += (s, ev) =>
+            {
+                if (NoteEditor != null)
+                {
+                    // 动画完成后，解除尺寸锁定，恢复 WPF 的自动流式拉伸
+                    // 此时 AvalonEdit 会根据最终的宽度进行【唯一一次】的换行重算，瞬间完成
+                    NoteEditor.Width = double.NaN; // double.NaN 在 WPF 中等同于 Auto
+                    NoteEditor.HorizontalAlignment = HorizontalAlignment.Stretch;
+                }
+            };
+
+            // 启动侧边栏动画
             SidebarPanel.BeginAnimation(FrameworkElement.WidthProperty, animation);
         }
 

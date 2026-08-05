@@ -6,7 +6,11 @@ namespace Lume
     {
         public string Title { get; set; } = "新笔记";
         public string DateCreated { get; set; } = DateTime.Now.ToString("yyyy/MM/dd");
-        // 用于保存富文本内容的 RTF 字符串（支持文本、图片、基础表格等）
+
+        // 兼容老版本的旧数据结构
         public string ContentRtf { get; set; } = "";
+
+        // 新增：高性能纯文本保存字段
+        public string ContentText { get; set; } = "";
     }
 }
