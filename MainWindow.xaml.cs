@@ -32,6 +32,8 @@ namespace Lume
             InitializeComponent();
             SetupVersionBadge();
 
+            NoteEditor.Options.InheritWordWrapIndentation = false;
+
             // 监听文本光标的移动
             NoteEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged;
 

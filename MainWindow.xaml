@@ -400,7 +400,11 @@
                        FontFamily="Segoe UI Emoji, Segoe UI, Microsoft YaHei UI, PingFang SC, sans-serif"
                        WordWrap="True" 
                        ShowLineNumbers="False"
-                       TextChanged="NoteEditor_TextChanged"/>
+                       TextChanged="NoteEditor_TextChanged">
+                        <avalonEdit:TextEditor.Options>
+                            <avalonEdit:TextEditorOptions InheritWordWrapIndentation="False"/>
+                        </avalonEdit:TextEditor.Options>
+                    </avalonEdit:TextEditor>
 
                     <Border Grid.Row="3" BorderBrush="#E5E5E5" Padding="0,5,0,5">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
