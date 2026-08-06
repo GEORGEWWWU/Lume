@@ -34,6 +34,9 @@ namespace Lume
 
             NoteEditor.Options.InheritWordWrapIndentation = false;
 
+            // 一键启用内置的 Markdown 语法高亮
+            NoteEditor.SyntaxHighlighting = ICSharpCode.AvalonEdit.Highlighting.HighlightingManager.Instance.GetDefinition("MarkDown");
+
             // 监听文本光标的移动
             NoteEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged;
 
@@ -103,6 +106,9 @@ namespace Lume
 
             // 注册彩色 Emoji 渲染器
             NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
+
+            // 一键启用内置的 Markdown 语法高亮
+            NoteEditor.SyntaxHighlighting = ICSharpCode.AvalonEdit.Highlighting.HighlightingManager.Instance.GetDefinition("MarkDown");
 
             // 修改文本框选的背景颜色和文本颜色
             // 设置背景色为淡灰色
@@ -1206,5 +1212,57 @@ namespace Lume
                 CursorPositionText.Text = $"第 {line} 行，第 {column} 列";
             }
         }
+
+        // 1. 控制悬浮菜单的弹出
+        private void BtnAa_Click(object sender, RoutedEventArgs e)
+        {
+            // 如果没有打开笔记，阻止弹出
+            if (EditorContainer.Visibility != Visibility.Visible) return;
+            TextFormatPopup.IsOpen = !TextFormatPopup.IsOpen;
+        }
+
+        // 2. 核心：AvalonEdit 文本格式化包裹逻辑
+        private void ApplyTextFormat(string prefix, string suffix)
+        {
+            if (NoteEditor == null || NoteEditor.Document == null) return;
+
+            int selectionStart = NoteEditor.SelectionStart;
+            int selectionLength = NoteEditor.SelectionLength;
+
+            // 获取选中的文本
+            string selectedText = NoteEditor.SelectedText;
+
+            // 拼接成新的 Markdown/HTML 格式文本
+            string newText = $"{prefix}{selectedText}{suffix}";
+
+            // 使用 Document.Replace 确保操作会被计入 AvalonEdit 的撤销历史(Ctrl+Z)
+            NoteEditor.Document.Replace(selectionStart, selectionLength, newText);
+
+            // 调整光标位置
+            if (selectionLength == 0)
+            {
+                // 如果没有选中文本，把光标停在两个符号的中间，方便用户直接打字
+                NoteEditor.SelectionStart = selectionStart + prefix.Length;
+            }
+            else
+            {
+                // 如果有选中文本，包裹后直接选中全段
+                NoteEditor.SelectionStart = selectionStart;
+                NoteEditor.SelectionLength = newText.Length;
+            }
+
+            // 焦点回到编辑器
+            NoteEditor.Focus();
+
+            // 触发保存状态更新
+            isDirty = true;
+            if (StatusText != null) StatusText.Text = "编辑中 (点击外部空白处即可保存)...";
+        }
+
+        // 3. 绑定各格式按钮的点击事件 (使用标准的 Markdown 和 HTML 语法)
+        private void BtnFormatBold_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("**", "**");
+        private void BtnFormatItalic_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("*", "*");
+        private void BtnFormatUnderline_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("<u>", "</u>"); // Markdown 原生没有下划线，通常借用 HTML
+        private void BtnFormatStrikethrough_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("~~", "~~");
     }
 }
