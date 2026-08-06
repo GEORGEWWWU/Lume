@@ -34,6 +34,9 @@ namespace Lume
 
             NoteEditor.Options.InheritWordWrapIndentation = false;
 
+            // 注册待办事项 Todo 渲染器
+            NoteEditor.TextArea.TextView.ElementGenerators.Add(new TodoElementGenerator(NoteEditor));
+
             // 一键启用内置的 Markdown 语法高亮
             NoteEditor.SyntaxHighlighting = ICSharpCode.AvalonEdit.Highlighting.HighlightingManager.Instance.GetDefinition("MarkDown");
 
@@ -106,6 +109,9 @@ namespace Lume
 
             // 注册彩色 Emoji 渲染器
             NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
+
+            // 注册待办事项 Todo 渲染器
+            NoteEditor.TextArea.TextView.ElementGenerators.Add(new TodoElementGenerator(NoteEditor));
 
             // 一键启用内置的 Markdown 语法高亮
             NoteEditor.SyntaxHighlighting = ICSharpCode.AvalonEdit.Highlighting.HighlightingManager.Instance.GetDefinition("MarkDown");
@@ -1264,5 +1270,36 @@ namespace Lume
         private void BtnFormatItalic_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("*", "*");
         private void BtnFormatUnderline_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("<u>", "</u>"); // Markdown 原生没有下划线，通常借用 HTML
         private void BtnFormatStrikethrough_Click(object sender, RoutedEventArgs e) => ApplyTextFormat("~~", "~~");
+
+        private void BtnFormatTodo_Click(object sender, RoutedEventArgs e)
+        {
+            if (NoteEditor == null || NoteEditor.Document == null) return;
+            if (EditorContainer.Visibility != Visibility.Visible) return;
+
+            var doc = NoteEditor.Document;
+            var caretLine = doc.GetLineByOffset(NoteEditor.CaretOffset);
+            string lineText = doc.GetText(caretLine.Offset, caretLine.Length);
+
+            // 获取这行前面的空格缩进，保留排版层级
+            string indent = lineText.Substring(0, lineText.Length - lineText.TrimStart().Length);
+
+            if (string.IsNullOrWhiteSpace(lineText))
+            {
+                // 1. 如果完全是空行，直接插入，并把光标推到方框后面
+                doc.Insert(caretLine.Offset, "- [ ] ");
+                NoteEditor.CaretOffset = caretLine.Offset + 6;
+            }
+            else if (!lineText.TrimStart().StartsWith("- [ ] ") && !lineText.TrimStart().StartsWith("- [x] ", StringComparison.OrdinalIgnoreCase))
+            {
+                // 2. 如果当前行有普通的字（且不是待办），则在文字的最前面强制插入待办
+                doc.Insert(caretLine.Offset + indent.Length, "- [ ] ");
+            }
+            // 3. 如果已经是待办了，就不重复插入了，交给用户直接点方框交互即可
+
+            // 获取焦点并触发系统标记更改
+            NoteEditor.Focus();
+            isDirty = true;
+            if (StatusText != null) StatusText.Text = "编辑中 (点击外部空白处即可保存)...";
+        }
     }
 }

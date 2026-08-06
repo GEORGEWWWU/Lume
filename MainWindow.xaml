@@ -302,7 +302,7 @@
                                         </StackPanel>
                                     </Border>
                                 </Popup>
-                                <Button Style="{StaticResource CapsuleIconBtn}">
+                                <Button x:Name="BtnFormatTodo" Style="{StaticResource CapsuleIconBtn}" Click="BtnFormatTodo_Click" ToolTip="待办事项">
                                     <Path Data="M4,5 L4.01,5 M8,5 L15,5 M4,10 L4.01,10 M8,10 L15,10 M4,15 L4.01,15 M8,15 L15,15" 
                                           Stroke="#555" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stretch="Uniform" Width="14" Height="13"/>
                                 </Button>
