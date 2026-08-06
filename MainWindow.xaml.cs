@@ -32,6 +32,9 @@ namespace Lume
             InitializeComponent();
             SetupVersionBadge();
 
+            // 监听文本光标的移动
+            NoteEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged;
+
             // 注册彩色 Emoji 渲染器
             NoteEditor.TextArea.TextView.ElementGenerators.Add(new EmojiElementGenerator());
 
@@ -435,10 +438,16 @@ namespace Lume
                 NoteEditor.Text = "";
             }
 
-            // 🟢 [新增] 恢复当前笔记特有的缩放比例（若为 0 或未设置则兜底为 1.0）
+            // 恢复当前笔记特有的缩放比例（若为 0 或未设置则兜底为 1.0）
             _currentZoomFactor = (currentNote.ZoomFactor <= 0) ? 1.0 : currentNote.ZoomFactor;
             NoteTitleBox.FontSize = BaseTitleFontSize * _currentZoomFactor;
             NoteEditor.FontSize = BaseEditorFontSize * _currentZoomFactor;
+
+            // 笔记加载完成后，立刻初始化底部数据
+            if (CharCountText != null) CharCountText.Text = $"{NoteEditor.Text.Length} 个字符";
+            if (ZoomText != null) ZoomText.Text = $"{Math.Round(_currentZoomFactor * 100)}%";
+            // 强制光标归位提示
+            if (CursorPositionText != null) CursorPositionText.Text = "第 1 行，第 1 列";
 
             isDirty = false;
 
@@ -550,6 +559,9 @@ namespace Lume
             if (isLoadingNote) return;
             isDirty = true;
             if (StatusText != null) StatusText.Text = "编辑中 (点击外部空白处即可保存)...";
+
+            // 实时更新字符总数
+            if (CharCountText != null) CharCountText.Text = $"{NoteEditor.Text.Length} 个字符";
         }
 
         private bool SaveNote()
@@ -1167,6 +1179,9 @@ namespace Lume
                 NoteTitleBox.FontSize = BaseTitleFontSize * _currentZoomFactor;
                 NoteEditor.FontSize = BaseEditorFontSize * _currentZoomFactor;
 
+                // 实时更新底部状态栏的缩放百分比
+                if (ZoomText != null) ZoomText.Text = $"{Math.Round(_currentZoomFactor * 100)}%";
+
                 // 2. 存入当前笔记对象并标记 dirty，提醒系统保存
                 if (currentNote != null)
                 {
@@ -1176,6 +1191,17 @@ namespace Lume
                 }
 
                 e.Handled = true; // 拦截事件，避免文本上下滚动
+            }
+        }
+
+        // 光标行列变化的处理方法
+        private void Caret_PositionChanged(object sender, EventArgs e)
+        {
+            if (CursorPositionText != null)
+            {
+                int line = NoteEditor.TextArea.Caret.Line;
+                int column = NoteEditor.TextArea.Caret.Column;
+                CursorPositionText.Text = $"第 {line} 行，第 {column} 列";
             }
         }
     }

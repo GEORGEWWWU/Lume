@@ -382,6 +382,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock x:Name="FolderPathText" Text="归档于..." Grid.Row="0" Foreground="#AAA" HorizontalAlignment="Left" FontSize="11"/>
@@ -400,6 +401,16 @@
                        WordWrap="True" 
                        ShowLineNumbers="False"
                        TextChanged="NoteEditor_TextChanged"/>
+
+                    <Border Grid.Row="3" BorderBrush="#E5E5E5" Padding="0,5,0,5">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <TextBlock x:Name="CursorPositionText" Text="第 1 行，第 1 列" Foreground="#A0A0A0" FontSize="11.5" Margin="0,0,25,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="CharCountText" Text="0 个字符" Foreground="#A0A0A0" FontSize="11.5" Margin="0,0,25,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ZoomText" Text="100%" Foreground="#A0A0A0" FontSize="11.5" Margin="0,0,25,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="UTF-8" Foreground="#A0A0A0" FontSize="11.5" Margin="0,0,25,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Lume 笔记" Foreground="#A0A0A0" FontSize="11.5" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Grid>
         </Border>
