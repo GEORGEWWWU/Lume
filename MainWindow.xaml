@@ -377,7 +377,7 @@
                 <TextBlock x:Name="EmptyStateText" Text="单击此处新建笔记" Foreground="#CCCCCC" FontSize="24" FontWeight="Bold" 
                           HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
 
-                <Grid x:Name="EditorContainer" Visibility="Collapsed">
+                <Grid x:Name="EditorContainer" Visibility="Collapsed" PreviewMouseWheel="EditorContainer_PreviewMouseWheel">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>

@@ -23,6 +23,9 @@ namespace Lume
         private const string VIRTUAL_EXTERNAL_FOLDER = "VIRTUAL_EXTERNAL"; // 虚拟文件夹标识
         private System.Windows.Threading.DispatcherTimer searchTimer;
         private bool isSidebarAnimating = false; // 侧边栏动画锁
+        private double _currentZoomFactor = 1.0;
+        private const double BaseTitleFontSize = 28.0;  // 标题基准字号
+        private const double BaseEditorFontSize = 15.0; // 正文基准字号
 
         public MainWindow()
         {
@@ -421,18 +424,21 @@ namespace Lume
             // --- AvalonEdit 高性能加载逻辑 ---
             if (!string.IsNullOrEmpty(currentNote.ContentText))
             {
-                // 优先加载纯文本新格式
                 NoteEditor.Text = currentNote.ContentText;
             }
             else if (!string.IsNullOrEmpty(currentNote.ContentRtf))
             {
-                // 自动兼容并转换旧版的 RTF
                 NoteEditor.Text = ExtractTextFromRtf(currentNote.ContentRtf);
             }
             else
             {
                 NoteEditor.Text = "";
             }
+
+            // 🟢 [新增] 恢复当前笔记特有的缩放比例（若为 0 或未设置则兜底为 1.0）
+            _currentZoomFactor = (currentNote.ZoomFactor <= 0) ? 1.0 : currentNote.ZoomFactor;
+            NoteTitleBox.FontSize = BaseTitleFontSize * _currentZoomFactor;
+            NoteEditor.FontSize = BaseEditorFontSize * _currentZoomFactor;
 
             isDirty = false;
 
@@ -563,6 +569,9 @@ namespace Lume
             // 直接获取文本，抛弃沉重的 RTF 内存流
             currentNote.ContentText = NoteEditor.Text;
             currentNote.ContentRtf = ""; // 清空旧的富文本数据，大幅度减小存储体积
+
+            // 写入当前笔记的缩放比例
+            currentNote.ZoomFactor = _currentZoomFactor;
 
             if (string.IsNullOrEmpty(currentFilePath))
             {
@@ -1133,6 +1142,40 @@ namespace Lume
                 // 格式化输出为主版本.次版本.内部版本（例如：v1.0.0）
                 // 这样可以去掉默认的第4位修订号，看起来更精简
                 VersionText.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+            }
+        }
+
+        // 滚轮拦截事件：实现整体字号的放大与缩小
+        private void EditorContainer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Delta > 0)
+                {
+                    _currentZoomFactor += 0.1; // 放大 10%
+                }
+                else if (e.Delta < 0)
+                {
+                    _currentZoomFactor -= 0.1; // 缩小 10%
+                }
+
+                // 限制缩放极值：50% ~ 300%
+                if (_currentZoomFactor < 0.5) _currentZoomFactor = 0.5;
+                if (_currentZoomFactor > 3.0) _currentZoomFactor = 3.0;
+
+                // 1. 实时渲染字体大小
+                NoteTitleBox.FontSize = BaseTitleFontSize * _currentZoomFactor;
+                NoteEditor.FontSize = BaseEditorFontSize * _currentZoomFactor;
+
+                // 2. 存入当前笔记对象并标记 dirty，提醒系统保存
+                if (currentNote != null)
+                {
+                    currentNote.ZoomFactor = _currentZoomFactor;
+                    isDirty = true;
+                    if (StatusText != null) StatusText.Text = "编辑中 (点击外部空白处即可保存)...";
+                }
+
+                e.Handled = true; // 拦截事件，避免文本上下滚动
             }
         }
     }

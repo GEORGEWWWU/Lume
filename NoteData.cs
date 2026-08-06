@@ -12,5 +12,8 @@ namespace Lume
 
         // 新增：高性能纯文本保存字段
         public string ContentText { get; set; } = "";
+
+        // 独立保存当前笔记的缩放比例（默认 1.0）
+        public double ZoomFactor { get; set; } = 1.0;
     }
 }
