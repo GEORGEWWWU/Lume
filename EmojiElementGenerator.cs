@@ -196,8 +196,7 @@ namespace Lume
                     Height = logicalHeight,
                     Stretch = Stretch.Uniform,
                     VerticalAlignment = VerticalAlignment.Bottom,
-                    // 稍微上移一点点对齐文字基线
-                    Margin = new Thickness(0, 0, 0, -1)
+                    Margin = new Thickness(0, 0, 0, -6) //位移
                 };
 
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
